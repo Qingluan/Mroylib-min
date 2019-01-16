@@ -1,0 +1,40 @@
+html{
+	background: url(images/bc.jpg) no-repeat center center fixed;
+	-webkit-background-size : cover;
+	-moz-background-size:cover;
+	-o-background-size:cover;
+	background-size:cover;
+}
+
+body {
+	font-family: fantasy;
+	background:transparent;
+}
+
+div#new-user{
+	width:300px;
+	border-radius:10px;
+	position: relative;
+	left: 38%;
+	opacity:0.5;
+}
+
+div#user-panel{
+	width:300px;
+	border-radius:10px;
+	position:fixed;
+	top:37%;
+	left:38%;
+	opacity:0.5;
+	font-weight:100;
+	font-style:italic;
+}
+
+div#user-panel:hover{
+	opacity:1;
+}
+
+div#info-panel > p {
+	font-size: 17px;
+	font-weight: 100;
+}
