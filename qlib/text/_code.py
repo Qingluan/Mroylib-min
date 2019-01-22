@@ -271,24 +271,36 @@ class Chain(metaclass=ChainMeta):
             if n.val:
                 tn = n.graph(style="stroke: #f77")
                 nodes.append(tn)
+                if n == self.fr:continue
                 try:
                     last_name = None
+                    nnum = self.num
                     for l in n.val.split("</br>"):
+                        
                         name , attrs = l.split("=", 1)
                         opers = OPERATOR.findall(attrs)
                         if opers:
-                            node_name, node_str = Node.tmp_graph(opers[0],label=str(opers[0]) + " [%d]"% self.num, labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", description=l)
+                            node_name, node_str = Node.tmp_graph(opers[0],label=str(opers[0]) + " [%d]"% nnum, labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", description=l)
                             nodes.append(node_str)
-                        if last_name != None:
-                            ch = last_name + " -> " +node_name
                         else:
-                            ch = n.Name + " -> " + node_name
+                            node_name, node_str = Node.tmp_graph(attrs,label=str(attrs) + " [%d]"% nnum, labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", description=l) 
+                            nodes.append(node_str)
+
+                        if last_name != None:
+                            
+                            # print(last_name, "--->", node_name)
+                            # ch = last_name + " -> " +node_name
+                            ch = node_name + " ->" +  n.Name
+
+                        else:
+                            ch = node_name + " ->" +  n.Name
                         chains.append(ch)
                         if node_name:
                             last_name = node_name
+                        nnum +=1 
                         
-                    if last_name:
-                        chains.append(last_name + " -> "+ n.Name)
+                    #if last_name:
+                    #    chains.append(last_name + " -> "+ n.Name)
                     cprint(n.val, 'green')
                 except Exception as e:
                     cprint(e, 'red')
@@ -323,7 +335,9 @@ class Chain(metaclass=ChainMeta):
             else:
                 res =  self.fr.Name +"->" + self.to.Name + ";"
                 chains.append(res)
+        # print('no. ',self.num)
         return nodes + chains
+
 
     @classmethod
     def digraph(cls, *node_list, server=None):
@@ -352,12 +366,14 @@ digraph {
             tmp = n + " [label=\"%s\" rx=10 ry=10 labelStyle=\"fill: #fff\" style=\"fill: #22a6ff; font-weight: bold\" ];" % n
             same.append(tmp)
 
-        content = []
+        content = {} 
         for i in li:
-            for l in i.graph():
-                if l not in content:
-                    content.append(l)
-        TEMP = TEMP % ('\n    ' + '\n    '.join(same) , '\n    '.join(content))
+            for ggg in i.graph():
+                if ggg not in content:
+                    # print(ggg)
+                    content[ggg] = i.num
+        ccc = [i for i in sorted(content, key=lambda x: content[x])]
+        TEMP = TEMP % ('\n    ' + '\n    '.join(same) , '\n    '.join(ccc))
         if server:
             requests.post(server, data={"graph":TEMP})
         return TEMP
@@ -565,7 +581,10 @@ def get_modules_info(Model, server='http://127.0.0.1:18080/'):
             attrs[attr_state[0]] = tmp_dict[attr_state[0]]
         else:
             if output:
-                Node[output[-1]].is_return = True
+                
+                _n  = Node[output[-1]]
+                _n.is_return = True
+                _n.val = line
 
     Chain.tables(*input_args)
     print(input_args)
