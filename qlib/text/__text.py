@@ -2,6 +2,8 @@ import re
 import time
 from qlib.io import get_output
 from termcolor import colored
+import tabulate
+
 
 
 def text2dict(text):
