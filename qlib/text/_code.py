@@ -17,6 +17,8 @@ ST_SPANCE = re.compile(r'^\s+')
 ATT = re.compile(r'([\w\.]+)\s*?=\s*?(.+)')
 INPUT_VARS = re.compile(r'\((.+)\)')
 WORD = re.compile(r"(\w+)")
+ATTRS_NAME =re.compile(r"([\w\.]+)")
+OUTPUT = re.compile(r'return\s(.+)')
 IF_FUNC = re.compile(r'([\w\.]+)')
 # FUNC = re.compile(r'(\w+)')
 FUNC = re.compile(r'((?:self\.)?\w+)')
@@ -72,11 +74,13 @@ class NodeMeta(type):
 
 class Node(metaclass=NodeMeta):
     all_nodes = {}
-    def __init__(self, name, val=None):
+    def __init__(self, name, val=""):
         self.name = name
         self.val = val
         self.next = []
         self.last = []
+        self.label = name
+        self.is_return = False
         self.__class__.all_nodes[name] = self
     
     def __add__(self, k):
@@ -103,6 +107,44 @@ class Node(metaclass=NodeMeta):
                     yield k
                     continue
                 yield from next_node.chains(links=k)
+    
+    def _name(self, a):
+        return re.sub(r'\W', '_' , str(a))
+    
+    @property
+    def Name(self):
+        return self._name(self)
+    
+    def graph(self, **kwargs):
+        n = self.Name
+        w = []
+        if self.val:
+            self.val = self.val.replace("\n","</br>")
+        if self.is_return:
+            kwargs['style'] = "fill: #60b573; font-weight: bold"
+
+        if 'label' not in kwargs:
+            kwargs['label'] = str(self)
+        if 'description' not in kwargs:
+            kwargs['description'] = self.val
+        for k,v in kwargs.items():
+            w.append("%s=\"%s\"" %(k, v))
+        res = n + " [" +  ",".join(w) + "];"
+        return res
+    
+    @classmethod
+    def tmp_graph(cls, obj,**kwargs):
+        name = re.sub(r'\W', '_' , str(obj)) 
+        if not 'label' in kwargs:
+            kwargs['label'] = str(obj)
+        w = []
+        for k,v in kwargs.items():
+            w.append("%s=\"%s\"" %(k, v))
+        res = name + " [" +  ",".join(w) + "];" 
+        nn = Node(str(obj), val=str(obj))
+        if 'description' in kwargs:
+            nn.val = kwargs.get('description')
+        return name,res
 
 
 
@@ -144,15 +186,14 @@ class ChainMeta(type):
 
 class Chain(metaclass=ChainMeta):
     
-    def __init__(self, fr,to, val=None, condition=None, connection=None, description=''):
+    def __init__(self, fr,to, val=None, attrs="", num=None):
         fr = Node[fr]
         to = Node[to]
         self.fr = fr
         self.to = to
         self.val = val
-        self.condition = condition
-        self.connection = connection
-        self.description = description
+        self.attrs = attrs
+        self.num = num
         fr + to
 
     @classmethod
@@ -218,22 +259,71 @@ class Chain(metaclass=ChainMeta):
                 yield from ch.chains(links=k)
     
     def graph(self):
-        if self.connection:
-            node_name = self._name(self.connection)
-            node_str = node_name + " [label=\"%s\" rx=10 ry=10 labelStyle=\"fill: #fff font-weight:bold\" style=\"fill: #f77; font-weight: bold\" description=\"%s\"];" % (self.connection, self.description)
-            
-            if  self.condition:
-                one = str(self.fr) +" -> " + node_name + " [label=\"%s\", style=\"stroke-dasharray: 5, 5; \" , color=\"gray\", description=\"%s\"];\n" % (self.condition, self.description)
-                two = node_name + " -> " + str(self.to) + " [label=\"%s\", style=\"stroke-dasharray: 5, 5;\" , color=\"gray\", description=\"%s\"];" % (self.condition, self.description)
-                res = node_str + "\n" + one + two
+        condition = self.attrs.get("condition")
+        connection = self.attrs.get("connection") 
+        description = self.attrs.get("description")
+        is_return = self.attrs.get("is_return")
+        
+        nodes = []
+        chains = []
+        
+        for n in [self.fr, self.to]:
+            if n.val:
+                tn = n.graph(style="stroke: #f77")
+                nodes.append(tn)
+                try:
+                    last_name = None
+                    for l in n.val.split("</br>"):
+                        name , attrs = l.split("=", 1)
+                        opers = OPERATOR.findall(attrs)
+                        if opers:
+                            node_name, node_str = Node.tmp_graph(opers[0],label=str(opers[0]) + " [%d]"% self.num, labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", description=l)
+                            nodes.append(node_str)
+                        if last_name != None:
+                            ch = last_name + " -> " +node_name
+                        else:
+                            ch = n.Name + " -> " + node_name
+                        chains.append(ch)
+                        if node_name:
+                            last_name = node_name
+                        
+                    if last_name:
+                        chains.append(last_name + " -> "+ n.Name)
+                    cprint(n.val, 'green')
+                except Exception as e:
+                    cprint(e, 'red')
+                    pass
+
+        
+        if is_return:
+            n = self.to.graph(style="fill: #60b573; font-weight: bold")
+            nodes.append(n)
+
+        if connection:
+            if str(connection).strip() in Node:
+                _n = Node[str(connection).strip()]
+                node_name = _n.Name
+                node_str = _n.graph(label= _n.label + "[%d]" %self.num ,rx="10",ry="10",labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold")
+                # print("---- add ---", node_str)
             else:
-                res =  node_str +"\n" + str(self.fr) +"-> "+ node_name +";\n" + node_name + " ->" + str(self.to) + ";"
+                node_name, node_str = Node.tmp_graph(str(connection).strip(),label=str(connection).strip() + "[%d]" % self.num, rx="10",ry="10",labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", description=description)
+            nodes.append(node_str)
+            if  condition:
+                one = self.fr.Name +" -> " + node_name + " [label=\"%s\", style=\"stroke-dasharray: 5, 5; \" , color=\"gray\", description=\"%s\"];\n" % (condition, description)
+                two = node_name + " -> " + self.to.Name + " [label=\"%s\", style=\"stroke-dasharray: 5, 5;\" , color=\"gray\", description=\"%s\"];" % (condition, description)
+                chains.append(one)
+                chains.append(two)
+            else:
+                chains.append(self.fr.Name +"-> "+ node_name + ";")
+                chains.append(node_name + " ->" + self.to.Name + ";")
         else:
-            if  self.condition:
-                res = str(self.fr) +"->" + str(self.to) + " [label=\"%s\", style=\"stroke-dasharray: 5, 5;\" , color=\"gray\", description=\"%s\"];" % (self.condition, self.description)
+            if condition:
+                res = self.fr.Name +"->" + self.to.Name + " [label=\"%s\", style=\"stroke-dasharray: 5, 5;\" , color=\"gray\", description=\"%s\"];" % (condition, description)
+                chains.append(res)
             else:
-                res =  str(self.fr) +"->" + str(self.to) + ";"
-        return res.split("\n")
+                res =  self.fr.Name +"->" + self.to.Name + ";"
+                chains.append(res)
+        return nodes + chains
 
     @classmethod
     def digraph(cls, *node_list, server=None):
@@ -343,6 +433,7 @@ def get_modules_info(Model, server='http://127.0.0.1:18080/'):
     [Node(input_arg) for input_arg in input_args]
     # if line endswith "," or "\" will compress lines to one line
     cache_lines = '' 
+    output = []
     for num, line in enumerate(forward_code):
         if line.strip().endswith(","):
             
@@ -373,7 +464,11 @@ def get_modules_info(Model, server='http://127.0.0.1:18080/'):
         if_state = IF_STATE.findall(line)
         for_state = FOR_STATE.findall(line)
         attr_state = ATT.findall(line)
-
+        _output = OUTPUT.findall(line)
+        if _output:
+            for i in ATTRS_NAME.findall(_output[0]):
+                output.append(i)
+            cprint(output, 'red')
         
 
         if space_l > last_space_l and last_space_l != -1:
@@ -417,6 +512,7 @@ def get_modules_info(Model, server='http://127.0.0.1:18080/'):
 
         last_space_l = space_l
 
+        
         if attr_state:
             # locate attr in attr_state from __init__ function
             tmp_dict = {}    
@@ -429,6 +525,7 @@ def get_modules_info(Model, server='http://127.0.0.1:18080/'):
             cprint("%s %s %s" %(words, opers,attr_oper), 'magenta')
             for k in FUNC.findall(attr_state[1]):
                 
+
                 if k in self_attr_dict:
                     w = self_attr_dict[k]
                 else:
@@ -440,19 +537,35 @@ def get_modules_info(Model, server='http://127.0.0.1:18080/'):
                         func = attr_state[1]
                     func = self_attr_dict.get(func, func)
                     # print("--> .  " ,func, k)
-                    chain = Chain(w, n, val=v, connection=func, description=attr_state[1])
+
+
+                    if w == n:
+                        
+                        _n = Node[n]
+                        if _n.val:
+                            _n.val += "\n" + line
+                        else:
+                            _n.val = line
+
+                    chain = Chain(w, n, val=v,num=num, attrs={
+                        "connection":func,
+                        "description":line,
+                    })
                     # print( "{} = {}".format(n, v))
                 funs_chains.append(w)
             if if_mask:
                 if_str = forward_code[if_levels_keys[-if_mask]].strip()
                 if chain:
                     # print("f ..")
-                    chain.condition = if_str
+                    chain.attrs['condition'] = if_str
             else:
                 if_str = ''
             cprint(colored(n, 'yellow') + str(funs_chains) + colored(if_str, 'green'), 'green', attrs=['underline'] )
             tmp_dict[attr_state[0]] = funs_chains
             attrs[attr_state[0]] = tmp_dict[attr_state[0]]
+        else:
+            if output:
+                Node[output[-1]].is_return = True
 
     Chain.tables(*input_args)
     print(input_args)
