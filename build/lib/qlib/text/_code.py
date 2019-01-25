@@ -119,8 +119,7 @@ class Node(metaclass=NodeMeta):
         n = self.Name
         w = []
         if self.val:
-            self.val = self.val.replace("\n", '</br>')
-        
+            self.val = self.val.replace("\n","</br>")
         if self.is_return:
             kwargs['style'] = "fill: #60b573; font-weight: bold"
 
@@ -187,7 +186,7 @@ class ChainMeta(type):
 
 class Chain(metaclass=ChainMeta):
     
-    def __init__(self, fr,to, val=None, attrs="", code='',num=None):
+    def __init__(self, fr,to, val=None, attrs="", num=None):
         fr = Node[fr]
         to = Node[to]
         self.fr = fr
@@ -195,7 +194,6 @@ class Chain(metaclass=ChainMeta):
         self.val = val
         self.attrs = attrs
         self.num = num
-        self.code = code
         fr + to
 
     @classmethod
@@ -264,7 +262,6 @@ class Chain(metaclass=ChainMeta):
         condition = self.attrs.get("condition")
         connection = self.attrs.get("connection") 
         description = self.attrs.get("description")
-        code = self.attrs.get("code")
         is_return = self.attrs.get("is_return")
         
         nodes = []
@@ -283,10 +280,10 @@ class Chain(metaclass=ChainMeta):
                         name , attrs = l.split("=", 1)
                         opers = OPERATOR.findall(attrs)
                         if opers:
-                            node_name, node_str = Node.tmp_graph(opers[0],label=str(opers[0]) + " [%d]"% nnum, labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", description=l, code=code)
+                            node_name, node_str = Node.tmp_graph(opers[0],label=str(opers[0]) + " [%d]"% nnum, labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", description=l)
                             nodes.append(node_str)
                         else:
-                            node_name, node_str = Node.tmp_graph(attrs,label=str(attrs) + " [%d]"% nnum, labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", description=l, code=code) 
+                            node_name, node_str = Node.tmp_graph(attrs,label=str(attrs) + " [%d]"% nnum, labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", description=l) 
                             nodes.append(node_str)
 
                         if last_name != None:
@@ -318,14 +315,14 @@ class Chain(metaclass=ChainMeta):
             if str(connection).strip() in Node:
                 _n = Node[str(connection).strip()]
                 node_name = _n.Name
-                node_str = _n.graph(label= _n.label + "[%d]" %self.num ,rx="10",ry="10",labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", code=code)
+                node_str = _n.graph(label= _n.label + "[%d]" %self.num ,rx="10",ry="10",labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold")
                 # print("---- add ---", node_str)
             else:
-                node_name, node_str = Node.tmp_graph(str(connection).strip(),label=str(connection).strip() + "[%d]" % self.num, rx="10",ry="10",labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", description=description, code=code)
+                node_name, node_str = Node.tmp_graph(str(connection).strip(),label=str(connection).strip() + "[%d]" % self.num, rx="10",ry="10",labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", description=description)
             nodes.append(node_str)
             if  condition:
-                one = self.fr.Name +" -> " + node_name + " [label=\"%s\", style=\"stroke-dasharray: 5, 5; \" , color=\"gray\", description=\"%s\", code=\"%s\"];\n" % (condition, description, code)
-                two = node_name + " -> " + self.to.Name + " [label=\"%s\", style=\"stroke-dasharray: 5, 5;\" , color=\"gray\", description=\"%s\", code=\"%s\"];" % (condition, description, code)
+                one = self.fr.Name +" -> " + node_name + " [label=\"%s\", style=\"stroke-dasharray: 5, 5; \" , color=\"gray\", description=\"%s\"];\n" % (condition, description)
+                two = node_name + " -> " + self.to.Name + " [label=\"%s\", style=\"stroke-dasharray: 5, 5;\" , color=\"gray\", description=\"%s\"];" % (condition, description)
                 chains.append(one)
                 chains.append(two)
             else:
@@ -453,7 +450,6 @@ def get_modules_info(Model, server='http://127.0.0.1:18080/'):
     # if line endswith "," or "\" will compress lines to one line
     cache_lines = '' 
     output = []
-    code = ''
     for num, line in enumerate(forward_code):
         if line.strip().endswith(","):
             
@@ -476,7 +472,6 @@ def get_modules_info(Model, server='http://127.0.0.1:18080/'):
 
         if not line:
             continue
-        code = code + "\n" + line
         if num == 0:
             continue
 
@@ -571,7 +566,6 @@ def get_modules_info(Model, server='http://127.0.0.1:18080/'):
                     chain = Chain(w, n, val=v,num=num, attrs={
                         "connection":func,
                         "description":line,
-                        "code": code
                     })
                     # print( "{} = {}".format(n, v))
                 funs_chains.append(w)

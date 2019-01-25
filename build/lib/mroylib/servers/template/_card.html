@@ -1,0 +1,36 @@
+<div class="card  border-0 mb-4 box-shadow" style="max-width: 28rem; margin-left: 30px">
+
+  <div class="card-body  text-info">
+  	{% if 'from' in data and 'to' in data %}
+		{% if data['from'] %}
+			<p class='card-text' style="color:gray"> 改变</p>
+			{% for k in data['to'] %}
+			
+				{% if data['from'].get(k,' ') != data['to'][k]  %}
+					<li><code>{{ k }} : <span class="card-text"><b>{{ data['from'].get(k,' ') }}</b> --> <b>{{ data['to'][k] }}</b></span></code></li>
+				
+				{% else %}
+					<li><i>{{ k }}</i> : <span class="card-text">{{ data['to'][k] }}</span></li>
+				{% end %}
+			
+				
+			{% end %}
+		
+		{% else %}
+			<p class='card-text' style="color:gray"> 新增</p>
+			{% for k in data['to'] %}
+				<li> <code>+</code> : <code>{{ k }}</code> <span class="card-text"><i>{{ data['to'][k] }}</i></span></li>
+			{% end %}
+		{% end %}
+		
+
+
+    
+	{% else %}
+  		{% for key,v in  data.items() %}
+  			<li><code>{{ key }}</code> : <span class="card-text">{{ v }}</span></li>
+    	{% end %}
+    {% end %}
+  </div>
+
+</div>
