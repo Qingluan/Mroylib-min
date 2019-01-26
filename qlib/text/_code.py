@@ -283,10 +283,16 @@ class Chain(metaclass=ChainMeta):
                         name , attrs = l.split("=", 1)
                         opers = OPERATOR.findall(attrs)
                         if opers:
-                            node_name, node_str = Node.tmp_graph(opers[0],label=str(opers[0]) + " [%d]"% nnum, labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", description=l, code=code)
+                            if is_return:
+                                node_name, node_str = Node.tmp_graph(opers[0],label=str(opers[0]) , labelStyle="fill: #fff font-weight:bold", description=l, code=code)
+                            else:
+                                node_name, node_str = Node.tmp_graph(opers[0],label=str(opers[0]) , labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", description=l, code=code)
                             nodes.append(node_str)
                         else:
-                            node_name, node_str = Node.tmp_graph(attrs,label=str(attrs) + " [%d]"% nnum, labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", description=l, code=code) 
+                            if is_return:
+                                node_name, node_str = Node.tmp_graph(attrs,label=str(attrs) , labelStyle="fill: #fff font-weight:bold", description=l, code=code) 
+                            else:
+                                node_name, node_str = Node.tmp_graph(attrs,label=str(attrs) , labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", description=l, code=code) 
                             nodes.append(node_str)
 
                         if last_name != None:
@@ -318,10 +324,10 @@ class Chain(metaclass=ChainMeta):
             if str(connection).strip() in Node:
                 _n = Node[str(connection).strip()]
                 node_name = _n.Name
-                node_str = _n.graph(label= _n.label + "[%d]" %self.num ,rx="10",ry="10",labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", code=code)
+                node_str = _n.graph(label= _n.label  ,rx="10",ry="10",labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", code=code)
                 # print("---- add ---", node_str)
             else:
-                node_name, node_str = Node.tmp_graph(str(connection).strip(),label=str(connection).strip() + "[%d]" % self.num, rx="10",ry="10",labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", description=description, code=code)
+                node_name, node_str = Node.tmp_graph(str(connection).strip(),label=str(connection).strip() , rx="10",ry="10",labelStyle="fill: #fff font-weight:bold", style="fill: #f77; font-weight: bold", description=description, code=code)
             nodes.append(node_str)
             if  condition:
                 one = self.fr.Name +" -> " + node_name + " [label=\"%s\", style=\"stroke-dasharray: 5, 5; \" , color=\"gray\", description=\"%s\", code=\"%s\"];\n" % (condition, description, code)
@@ -469,14 +475,17 @@ def get_modules_info(Model, server='http://127.0.0.1:18080/'):
             cache_lines += line.strip()
             line = cache_lines
             cache_lines = ''
-            
+        
+        code += line
+        if not code.endswith("\n"):
+            code += "\n"
         space = ST_SPANCE.findall(line)[0]
         space_l = len(space)
         line = line.strip()
 
         if not line:
             continue
-        code = code + "\n" + line
+        
         if num == 0:
             continue
 
