@@ -12,7 +12,7 @@ except ImportError as e:
 try:
     from fabric.api import local
 except ImportError as e:
-    print("pip3 install fabric ")
+    pass
 
 
 from redis import Redis
