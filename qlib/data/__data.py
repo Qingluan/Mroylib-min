@@ -10,6 +10,7 @@ DEBUG = False
 
 import requests
 import urllib.parse as up
+import tqdm
 from concurrent.futures.thread import ThreadPoolExecutor
 # DEBUG = True
 BACK_PATH = "/tmp/back_dirs"
@@ -119,6 +120,7 @@ class ESplugin(object):
             size = kargs['_size']
 
         if kargs:
+            url = os.path.join(self.Host, index)
             _raw_cond = kargs.items()
             cond = [{"match": {k:v}} for k,v in _raw_cond]
             query_condition = {
@@ -315,22 +317,22 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
             raise TypeError("must json str or dict!!")
         if flat:
             if simple:
-                res = { cls.__name__[0] + "_" + k : v for k,v in cls.flat(data)}
+                res = {  k : v for k,v in cls.flat(data)}
             else:
-                res = { cls.__name__ + "_" + k : v for k,v in cls.flat(data)}
+                res = {  k : v for k,v in cls.flat(data)}
         else:
             res = dict()
             for k,v in data.items():
                 if type(v) in (int, str, None,):
                     if simple:
-                        res[cls.__name__[0] + "_" + k] = v
+                        res[k] = v
                     else:
-                        res[cls.__name__ + "_" + k] = v
+                        res[k] = v
                 else:
                     if simple:
-                        res[cls.__name__[0] + "_" + k] = json.dumps(v)
+                        res[k] = json.dumps(v)
                     else:
-                        res[cls.__name__ + "_" + k] = json.dumps(v)
+                        res[k] = json.dumps(v)
                     
         
         return cls(**res)
@@ -345,6 +347,7 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
         return self.__class__.__name__ + "_" + n
 
     def add(self, con, check_same=False):
+        __dict = self.__dict__
         _insert_str = "INSERT INTO %s (%s) VALUES(" % (self.__class__.__name__, ",".join(__dict.keys()))
         for k in __dict:
             v = __dict[k]
@@ -607,6 +610,10 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
 
     def __mysql_commit(self):
         self.__con.commit()
+
+    def like(self, obj, **args):
+        ks = {k: "%" + str(v) + "%" for k,v in args.items()}
+        return self.query(obj, eq='like', **ks)
 
     def query(self,obj, eq="=", m='or', timestamp=None,**kargs):
         """
@@ -1102,6 +1109,22 @@ def csv_to_sql(Obj,csv_file, *fields, cache=None):
     return True
 
 
+def json_to_sql(table_name, json_file, cache=None, **options):
+    cs = []
+    Obj = type(table_name, (dbobj,), {})
+    with open(json_file, 'rb') as fp:
+        lines = fp.readlines()
+        for l in tqdm.tqdm(lines):
+            o = json.loads(l)
+            cs.append(Obj.from_json(o))
+    if cache and isinstance(cache, Cache):
+        cache.save_all(*cs)
+    elif isinstance(cache, str):
+        d = os.path.dirname(cache)
+        if os.path.exists(d):
+            c = Cache(cache, **options)
+            c.save_all(*cs)
+    return cs
 
 
 def open_xlsx(file, granularity=20):

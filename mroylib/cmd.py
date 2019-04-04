@@ -1,6 +1,6 @@
 from argparse import ArgumentParser
 from qlib.log import log
-from qlib.data import Cache,mysql_to_sqlite,sqlite_to_mysql
+from qlib.data import Cache,mysql_to_sqlite,sqlite_to_mysql, json_to_sql
 import logging
 from termcolor import colored
 import chardet, os, sys
@@ -12,12 +12,16 @@ parser = ArgumentParser()
 parser.add_argument("file_or_obj", nargs='*', help=" file or some object to handle\n\t can import excel -> elasticsearch\n\t sqlite -> elasticsearch\n\t mysql -> sqlite \n\t file.sql[mysql] / file.db[sqlite] /excel.xlsx[excel] -> elasticsearch")
 parser.add_argument("-e","--encoding"  , default=None, help="change encoding: utf , gbk, ...")
 parser.add_argument("--to-elasticsearch", action='store_true',default=False, help="import sql files to elastic search ...")
-parser.add_argument("--to-sqlite", action='store_true',default=False,  help="import mysql files to sqlite ...")
-parser.add_argument("--to-mysql", action='store_true',default=False,  help="import sqlite files to mysql  ...")
+parser.add_argument("--to-sqlite", action='store_true',default=False,  help="files to sqlite ...")
+parser.add_argument("--to-mysql", action='store_true',default=False,  help="files to mysql  ...")
+parser.add_argument("-f","--from-type", default="mysql", help="set from type : mysql, sqlite, json | default: mysql" )
 parser.add_argument("--url", default='http://localhost:9200', help="elastic search url: default-> http://localhost:9200")
+parser.add_argument("--host", default='localhost', help="set host default-> localhost")
 parser.add_argument("--database", default='test4', help="set database")
 parser.add_argument("--user", default='root', help="set user")
 parser.add_argument("--passwd", default='', help="set password")
+parser.add_argument("--table-name", default='export', help="set tablename, default: export")
+# parser.add_argument("--to-file", default='/tmp/output', help="set export file, use for --to-sqlite default: /tmp/output ")
 
 
 
@@ -72,8 +76,17 @@ def main():
             print("{} -> {}".format(f, args.url))
         sys.exit(0)
     elif args.to_sqlite:
-        for f in args.file_or_obj:
-            mysql_to_sqlite(f, database=args.database, user=args.user, password=args.passwd)
+        if args.from_type == "json":
+            from_json, to_sql = args.file_or_obj
+            json_to_sql(args.table_name, from_json, cache=to_sql)
+        elif args.from_type == 'mysql':
+            for f in args.file_or_obj:
+                mysql_to_sqlite(f, database=args.database, user=args.user, password=args.passwd)
+        
+            
     elif args.to_mysql:
         for f in args.file_or_obj:
-            sqlite_to_mysql(f, database=args.database, user=args.user, password=args.passwd)
+            if args.from_type == 'sqlite':
+                sqlite_to_mysql(f, database=args.database, user=args.user, password=args.passwd)
+            elif args.from_type == "json":
+                pass
