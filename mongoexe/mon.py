@@ -146,7 +146,7 @@ class ExDatabase(Database):
         if exe:
             fs = {exe.submit(self[col].backup_to, backup_data[col]): col for col in self.cols if 'system.prof' not in col}
             for futu in concurrent.futures.as_completed(fs):
-                res[col] = futu.result()
+                res[fs[futu]] = futu.result()
         else:
             for col in self.cols:
                 if 'system.prof' in col:
@@ -189,23 +189,29 @@ class ExCollection(Collection):
         
         return self.index_information()
     
-    def backup_to(self, backup_collection, bach_size=1024):
+    def backup_to(self, backup_collection, bach_size=5000):
+        res = []
         try:
-            res = []
-            for data in tqdm.tqdm(self.find().batch_size(bach_size), desc="collecitons"% self.full_name):
+            
+            for data in tqdm.tqdm(self.find().batch_size(bach_size), desc="collecitons: %s"% self.full_name, total=self.count()):
                 res.append(data)
                 if len(res) % bach_size == 0 and len(res) > 0:
                     backup_collection.insert_many(res)
                     res = []
-            if len(res):
+            if len(res)> 0:
                 backup_collection.insert_many(res)
             return True
         except Exception as e:
-            _, _, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            l = exc_tb.tb_lineno
-            tqdm.tqdm.write(str(e) + "%s:%d" %(fname,l))
-            return False
+            if '_id_ dup key' in str(e.details):
+                return True
+            else:
+                _, _, exc_tb = sys.exc_info()
+                fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                l = exc_tb.tb_lineno
+                print(res, e.details)
+                raise e
+                tqdm.tqdm.write(str(e) + "%s:%d" %(fname,l))
+                return False
           
 
 
