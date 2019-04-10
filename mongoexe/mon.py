@@ -455,7 +455,7 @@ class Mon(MongoClient):
             async for doc in col.find():
                 if len(res) % 2000 ==0 and len(res) > 0:
                     if count > 2000:
-                        insert_task = asyncio.ensure_future(async_back_col.insert_many(res))
+                        insert_task = asyncio.ensure_future(async_back_col.insert_many(res, check_keys=False))
                         tasks.append(insert_task)
                     else:
                         await async_back_col.insert_many(res)
@@ -468,7 +468,7 @@ class Mon(MongoClient):
                         processorBar.update(2000)
 
             if len(res) > 0:
-                await async_back_col.insert_many(res)
+                await async_back_col.insert_many(res, check_keys=False)
         except BulkWriteError as e:
             pass
         except pymongo.errors.OperationFailure as e:
