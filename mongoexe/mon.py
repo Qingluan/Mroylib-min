@@ -189,14 +189,16 @@ class ExCollection(Collection):
         
         return self.index_information()
     
-    def backup_to(self, backup_collection, bach_size=None):
+    def backup_to(self, backup_collection, bach_size=10240, find_bach=2048):
         res = []
         try:
             c = self.find()
-            if bach_size:
-                c = c.batch_size(bach_size)
-            for data in tqdm.tqdm(c, desc="collecitons: %s"% self.full_name, total=self.count()):
+            if find_bach:
+                c = c.batch_size(find_bach)
+            process = tqdm.tqdm( desc="collecitons: %s"% self.full_name, total=self.count())
+            for data in c:
                 res.append(data)
+                process.update()
                 if len(res) % bach_size == 0 and len(res) > 0:
                     backup_collection.insert_many(res)
                     res = []
@@ -204,6 +206,8 @@ class ExCollection(Collection):
                 backup_collection.insert_many(res)
             return True
         except Exception as e:
+            if not hasattr(e, 'details'):
+                raise e
             if '_id_ dup key' in str(e.details):
                 return True
             else:
