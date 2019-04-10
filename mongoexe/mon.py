@@ -136,7 +136,7 @@ class ExDatabase(Database):
             for res in  coll.fuzzy(str(search_key)):
                 yield res
     
-    def backup_to(self, backup_data:ExDatabase):
+    def backup_to(self, backup_data):
         res = {}
         for col in self.cols:
             if self[col].backup_to(backup_data):
