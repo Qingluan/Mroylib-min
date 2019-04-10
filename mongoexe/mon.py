@@ -18,7 +18,7 @@ import zipfile
 from tempfile import NamedTemporaryFile
 from tempfile import TemporaryDirectory
 from functools import reduce
-
+import tqdm
 
 def json2xlsx(file, res, name="result"):
     workbook = xlwt.Workbook()
@@ -135,6 +135,16 @@ class ExDatabase(Database):
 
             for res in  coll.fuzzy(str(search_key)):
                 yield res
+    
+    def backup_to(self, backup_data:ExDatabase):
+        res = {}
+        for col in self.cols:
+            if self[col].backup_to(backup_data):
+                res[col] = True
+            else:
+                res[col] = False
+        return res
+            
 
     def __call__(self, *keys, **kargs):
         for c in self.cols:
@@ -167,6 +177,24 @@ class ExCollection(Collection):
         
         return self.index_information()
     
+    def backup_to(self, backup_data:ExDatabase, bach_size=1024):
+        try:
+            res = []
+            for data in self.find().batch_size(bach_size):
+                res.append(data)
+                if res % bach_size == 0 and res:
+                    backup_data.insert_many(res)
+                    res = []
+            if len(res):
+                backup_data.insert_many(res)
+            return True
+        except Exception as e:
+            tqdm.tqdm.write(str(e))
+            return False
+          
+
+
+
     @property
     def search_index(self):
         return [i for i in self.indexs().keys() if i.endswith('_text')]
@@ -354,8 +382,35 @@ class Mon(MongoClient):
         super().__init__(host=host,port=port, **kargs)
 
     @property
+    def show_dbs(self):
+        return {i: self[i].command('dbstats')['storageSize']/ 1024**2  for i in self.dbs }
+
+    @property
     def dbs(self):
         return self.database_names()
+    
+    def scan_db(self, db):
+        coll = self[db]
+
+    def default_fileter(self, db):
+        db_size = self.show_dbs[db]
+        if db in ('admin', 'config'):
+            return False
+        if db_size < 100:
+            return False
+        return True
+        
+    
+    def backup_to_another_host(self, host='localhost', port=27017, filter_func=None, **kargs):
+        BackUpTo = Mon(host=host, port=port, **kargs)
+        if not filter_func:
+            filter_func = self.default_fileter
+        res = {}
+        for db in tqdm.tqdm(self.dbs, desc="backup %s/%s -> %s"% (self.host, db, host)):
+            if filter_func(self, db):
+                r = self[db].backup_to(BackUpTo[self.host+"_"+db])
+                res[db] = r
+        return res
 
     def wait_merge_info(self, col_name=None):
         if col_name:

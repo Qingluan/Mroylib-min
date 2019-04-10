@@ -1109,13 +1109,15 @@ def csv_to_sql(Obj,csv_file, *fields, cache=None):
     return True
 
 
-def json_to_sql(table_name, json_file, cache=None, **options):
+def json_to_sql(table_name, json_file,map=None, cache=None, **options):
     cs = []
     Obj = type(table_name, (dbobj,), {})
     with open(json_file, 'rb') as fp:
         lines = fp.readlines()
         for l in tqdm.tqdm(lines):
             o = json.loads(l)
+            if map:
+                o = map(o)
             cs.append(Obj.from_json(o))
     if cache and isinstance(cache, Cache):
         cache.save_all(*cs)
