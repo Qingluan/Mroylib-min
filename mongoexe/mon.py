@@ -183,7 +183,7 @@ class ExCollection(Collection):
             res = []
             for data in self.find().batch_size(bach_size):
                 res.append(data)
-                if res % bach_size == 0 and res:
+                if len(res) % bach_size == 0 and len(res) > 0:
                     backup_collection.insert_many(res)
                     res = []
             if len(res):
