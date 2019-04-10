@@ -408,7 +408,8 @@ class Mon(MongoClient):
         res = {}
         for db in tqdm.tqdm(self.dbs, desc="backup %s -> %s"% (self.address[0],host)):
             if filter_func(db):
-                r = self[db].backup_to(BackUpTo[self.address[0]+"_"+db])
+                db_name = (self.address[0]+"_"+db).replace(".","_").lower()
+                r = self[db].backup_to(BackUpTo[db_name])
                 res[db] = r
         return res
 

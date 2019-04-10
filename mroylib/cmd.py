@@ -1,6 +1,7 @@
 from argparse import ArgumentParser
 from qlib.log import log
 from qlib.data import Cache,mysql_to_sqlite,sqlite_to_mysql, json_to_sql
+from mongoexe.mon import Mon
 import logging
 from termcolor import colored
 import chardet, os, sys
@@ -14,12 +15,17 @@ parser.add_argument("-e","--encoding"  , default=None, help="change encoding: ut
 parser.add_argument("--to-elasticsearch", action='store_true',default=False, help="import sql files to elastic search ...")
 parser.add_argument("--to-sqlite", action='store_true',default=False,  help="files to sqlite ...")
 parser.add_argument("--to-mysql", action='store_true',default=False,  help="files to mysql  ...")
+parser.add_argument('-bm', "--backup-mongo", action='store_true',default=False,  help="mode to backup mongo. exm: -bm -H remote.ip -P port -p pass -bH backup.ip -bP backup.port -bp backup.pass")
 parser.add_argument("-f","--from-type", default="mysql", help="set from type : mysql, sqlite, json | default: mysql" )
 parser.add_argument("--url", default='http://localhost:9200', help="elastic search url: default-> http://localhost:9200")
-parser.add_argument("--host", default='localhost', help="set host default-> localhost")
-parser.add_argument("--database", default='test4', help="set database")
+parser.add_argument("-bH","--backup-host", default='localhost', help="set backup host default-> localhost")
+parser.add_argument("-bP","--backup-port", default='', help="set port")
+parser.add_argument("-bp","--backup-passwd", default='', help="set password")
+parser.add_argument("-H","--host", default='localhost', help="set host default-> localhost")
+parser.add_argument("-P","--port", default='', help="set port")
+parser.add_argument("-D","--database", default='test4', help="set database")
 parser.add_argument("--user", default='root', help="set user")
-parser.add_argument("--passwd", default='', help="set password")
+parser.add_argument("-p","--passwd", default='', help="set password")
 parser.add_argument("--table-name", default='export', help="set tablename, default: export")
 # parser.add_argument("--to-file", default='/tmp/output', help="set export file, use for --to-sqlite default: /tmp/output ")
 
@@ -90,3 +96,8 @@ def main():
                 sqlite_to_mysql(f, database=args.database, user=args.user, password=args.passwd)
             elif args.from_type == "json":
                 pass
+    
+
+    if args.backup_mongo:
+        m = Mon(host=args.host, port=args.port)
+        m.backup_to_another_host(host=args.backup_host, port=args.backup_port)
