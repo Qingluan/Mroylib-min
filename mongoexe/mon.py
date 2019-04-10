@@ -453,7 +453,7 @@ class Mon(MongoClient):
         tasks = []
         count = await col.count_documents({})
         async for doc in col.find():
-            
+            if "system." in doc:continue
             try:
                 if len(res) % 2000 ==0 and len(res) > 0:
                     if count > 5000:
@@ -471,6 +471,8 @@ class Mon(MongoClient):
                 if len(res) > 0:
                     await async_back_col.insert_many(res)
             except BulkWriteError as e:
+                pass
+            except pymongo.errors.DuplicateKeyError as e:
                 pass
             except pymongo.errors.OperationFailure as e:
                 _, _, exc_tb = sys.exc_info()
