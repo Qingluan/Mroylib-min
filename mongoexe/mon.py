@@ -6,6 +6,7 @@ from pymongo.errors import BulkWriteError
 from pymongo.cursor import Cursor
 from bson import Code
 from bson.objectid import ObjectId
+import concurrent
 from concurrent.futures.thread import ThreadPoolExecutor
 import time
 import xlrd, xlwt
@@ -137,13 +138,23 @@ class ExDatabase(Database):
             for res in  coll.fuzzy(str(search_key)):
                 yield res
     
-    def backup_to(self, backup_data):
+    def backup_to(self, backup_data, use_parrell=True):
         res = {}
-        for col in self.cols:
-            if self[col].backup_to(backup_data[col]):
-                res[col] = True
-            else:
-                res[col] = False
+        exe = None
+        if use_parrell:
+            exe = ThreadPoolExecutor(4)
+        if exe:
+            fs = {exe.submit(self[col].backup_to, backup_data[col]): col for col in self.cols if 'system.prof' not in col}
+            for futu in concurrent.futures.as_completed(fs):
+                res[col] = futu.result()
+        else:
+            for col in self.cols:
+                if 'system.prof' in col:
+                    continue
+                if self[col].backup_to(backup_data[col]):
+                    res[col] = True
+                else:
+                    res[col] = False
         return res
             
 
@@ -181,7 +192,7 @@ class ExCollection(Collection):
     def backup_to(self, backup_collection, bach_size=1024):
         try:
             res = []
-            for data in self.find().batch_size(bach_size):
+            for data in tqdm.tqdm(self.find().batch_size(bach_size), desc="collecitons"% self.full_name):
                 res.append(data)
                 if len(res) % bach_size == 0 and len(res) > 0:
                     backup_collection.insert_many(res)
