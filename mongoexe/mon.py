@@ -406,7 +406,7 @@ class Mon(MongoClient):
         if not filter_func:
             filter_func = self.default_fileter
         res = {}
-        for db in tqdm.tqdm(self.dbs, desc="backup %s/%s -> %s"% (self.host, db, host)):
+        for db in tqdm.tqdm(self.dbs, desc="backup %s -> %s"% (self.host,host)):
             if filter_func(self, db):
                 r = self[db].backup_to(BackUpTo[self.host+"_"+db])
                 res[db] = r
