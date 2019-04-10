@@ -30,6 +30,7 @@ from motor.motor_asyncio import AsyncIOMotorCollection
 import tqdm
 import sys
 import asyncio
+from termcolor import colored
 
 def json2xlsx(file, res, name="result"):
     workbook = xlwt.Workbook()
@@ -448,8 +449,9 @@ class Mon(MongoClient):
         return True
 
     async def  async_backup_to(self, col, async_back_col):
+        res = []
         try:
-            res = []
+            
             tasks = []
             count = await col.count_documents({})
             
@@ -483,6 +485,7 @@ class Mon(MongoClient):
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
             l = exc_tb.tb_lineno
             tqdm.tqdm.write(str(e)+ " %s:%d"% (fname, l))
+            print(colored(str(res), 'red'))
             raise e
     
     @classmethod
