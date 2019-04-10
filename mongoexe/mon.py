@@ -19,6 +19,7 @@ from tempfile import NamedTemporaryFile
 from tempfile import TemporaryDirectory
 from functools import reduce
 import tqdm
+import sys
 
 def json2xlsx(file, res, name="result"):
     workbook = xlwt.Workbook()

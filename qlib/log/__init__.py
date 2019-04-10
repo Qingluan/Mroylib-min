@@ -50,7 +50,7 @@ def load(level=logging.ERROR, stdout=sys.stdout):
     # if os.getenv("DEBUG"):
     logging.root.setLevel(level)
     logging.root.handlers = [hdlr]
-    logging.warning("load qlib's formater! ")
+    # logging.warning("load qlib's formater! ")
 
 
 def log(level, stdout=sys.stdout):
