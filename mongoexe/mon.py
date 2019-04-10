@@ -447,6 +447,33 @@ class Mon(MongoClient):
         if db_size < 100:
             return False
         return True
+    
+    async def deal_exception(self, f):
+        try:
+            await f
+        except BulkWriteError as e:
+            pass
+        except pymongo.errors.DuplicateKeyError as e:
+            pass
+        except pymongo.errors.OperationFailure as e:
+            _, _, exc_tb = sys.exc_info()
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            l = exc_tb.tb_lineno
+            tqdm.tqdm.write(str(e)+ " %s:%d"% (fname, l))
+        except bson.errors.InvalidDocument:
+            for v in res:
+                try:
+                    await async_back_col.insert_one(v)
+                except bson.errors.InvalidDocument:
+                    pass
+            res = []
+        except Exception as e:
+            _, _, exc_tb = sys.exc_info()
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            l = exc_tb.tb_lineno
+            tqdm.tqdm.write(str(e)+ " %s:%d"% (fname, l))
+            print(colored(str(res), 'red'))
+            raise e
 
     async def  async_backup_to(self, col, async_back_col):
         res = []
@@ -454,39 +481,18 @@ class Mon(MongoClient):
         cc = 0
         async for doc in col.find():
             if "system." in doc:continue
-            try:
-                if len(res) % 2000 ==0 and len(res) > 0:
-                    await async_back_col.insert_many(res)
-                    tqdm.tqdm.write("%d/%d"%(2000 * cc, count))
-                    res = []
-                    c += 1
-                res.append(doc)
-                if len(res) > 0:
-                    await async_back_col.insert_many(res)
-            except BulkWriteError as e:
-                pass
-            except pymongo.errors.DuplicateKeyError as e:
-                pass
-            except pymongo.errors.OperationFailure as e:
-                _, _, exc_tb = sys.exc_info()
-                fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                l = exc_tb.tb_lineno
-                tqdm.tqdm.write(str(e)+ " %s:%d"% (fname, l))
-            except bson.errors.InvalidDocument:
-                for v in res:
-                    try:
-                        await async_back_col.insert_one(v)
-                    except bson.errors.InvalidDocument:
-                        pass
+            if len(res) % 2000 ==0 and len(res) > 0:
+                fu = async_back_col.insert_many(res)
+                await self.deal_exception(fu)
+                tqdm.tqdm.write("%d/%d"%(2000 * cc, count))
                 res = []
-            except Exception as e:
-                _, _, exc_tb = sys.exc_info()
-                fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                l = exc_tb.tb_lineno
-                tqdm.tqdm.write(str(e)+ " %s:%d"% (fname, l))
-                print(colored(str(res), 'red'))
-                raise e
-    
+                c += 1
+            res.append(doc)
+          
+            if len(res) > 0:
+                fu = async_back_col.insert_many(res)
+                await self.deal_exception(fu)
+        
     @classmethod
     async def async_backup_to_another_hosts(cls, *host_ports, back_host="localhost", back_port=27017,limit=10,**kargs):
         tasks = []
