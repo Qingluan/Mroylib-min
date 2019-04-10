@@ -450,24 +450,17 @@ class Mon(MongoClient):
 
     async def  async_backup_to(self, col, async_back_col):
         res = []
-        tasks = []
         count = await col.count_documents({})
+        cc = 0
         async for doc in col.find():
             if "system." in doc:continue
             try:
                 if len(res) % 2000 ==0 and len(res) > 0:
-                    if count > 5000:
-                        insert_task = asyncio.ensure_future(async_back_col.insert_many(res))
-                        tasks.append(insert_task)
-                    else:
-                        await async_back_col.insert_many(res)
+                    await async_back_col.insert_many(res)
+                    tqdm.tqdm.write("%d/%d"%(2000 * cc, count))
                     res = []
+                    c += 1
                 res.append(doc)
-                if count > 5000:
-                    with  tqdm.tqdm(total=count, desc="count : %d"% count) as processorBar:
-                        for f in asyncio.as_completed(tasks):
-                            await f
-                            processorBar.update(2000)
                 if len(res) > 0:
                     await async_back_col.insert_many(res)
             except BulkWriteError as e:
