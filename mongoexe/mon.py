@@ -189,11 +189,13 @@ class ExCollection(Collection):
         
         return self.index_information()
     
-    def backup_to(self, backup_collection, bach_size=5000):
+    def backup_to(self, backup_collection, bach_size=None):
         res = []
         try:
-            
-            for data in tqdm.tqdm(self.find().batch_size(bach_size), desc="collecitons: %s"% self.full_name, total=self.count()):
+            c = self.find()
+            if bach_size:
+                c = c.batch_size(bach_size)
+            for data in tqdm.tqdm(c, desc="collecitons: %s"% self.full_name, total=self.count()):
                 res.append(data)
                 if len(res) % bach_size == 0 and len(res) > 0:
                     backup_collection.insert_many(res)
