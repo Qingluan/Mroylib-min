@@ -450,43 +450,47 @@ class Mon(MongoClient):
 
     async def  async_backup_to(self, col, async_back_col):
         res = []
-        try:
+        tasks = []
+        count = await col.count_documents({})
+        async for doc in col.find():
             
-            tasks = []
-            count = await col.count_documents({})
-            
-            async for doc in col.find():
+            try:
                 if len(res) % 2000 ==0 and len(res) > 0:
-                    if count > 2000:
+                    if count > 5000:
                         insert_task = asyncio.ensure_future(async_back_col.insert_many(res))
                         tasks.append(insert_task)
                     else:
                         await async_back_col.insert_many(res)
                     res = []
                 res.append(doc)
-            if count > 2000:
-                with  tqdm.tqdm(total=count, desc="count : %d"% count) as processorBar:
-                    for f in asyncio.as_completed(tasks):
-                        await f
-                        processorBar.update(2000)
-
-            if len(res) > 0:
-                await async_back_col.insert_many(res)
-        except BulkWriteError as e:
-            pass
-        except pymongo.errors.OperationFailure as e:
-            _, _, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            l = exc_tb.tb_lineno
-            tqdm.tqdm.write(str(e)+ " %s:%d"% (fname, l))
-
-        except Exception as e:
-            _, _, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            l = exc_tb.tb_lineno
-            tqdm.tqdm.write(str(e)+ " %s:%d"% (fname, l))
-            print(colored(str(res), 'red'))
-            raise e
+                if count > 5000:
+                    with  tqdm.tqdm(total=count, desc="count : %d"% count) as processorBar:
+                        for f in asyncio.as_completed(tasks):
+                            await f
+                            processorBar.update(2000)
+                if len(res) > 0:
+                    await async_back_col.insert_many(res)
+            except BulkWriteError as e:
+                pass
+            except pymongo.errors.OperationFailure as e:
+                _, _, exc_tb = sys.exc_info()
+                fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                l = exc_tb.tb_lineno
+                tqdm.tqdm.write(str(e)+ " %s:%d"% (fname, l))
+            except bson.errors.InvalidDocument:
+                for v in res:
+                    try:
+                        await async_back_col.insert_one(v)
+                    except bson.errors.InvalidDocument:
+                        pass
+                res = []
+            except Exception as e:
+                _, _, exc_tb = sys.exc_info()
+                fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                l = exc_tb.tb_lineno
+                tqdm.tqdm.write(str(e)+ " %s:%d"% (fname, l))
+                print(colored(str(res), 'red'))
+                raise e
     
     @classmethod
     async def async_backup_to_another_hosts(cls, *host_ports, back_host="localhost", back_port=27017,limit=10,**kargs):
