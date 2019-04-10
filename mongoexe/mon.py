@@ -139,7 +139,7 @@ class ExDatabase(Database):
     def backup_to(self, backup_data):
         res = {}
         for col in self.cols:
-            if self[col].backup_to(backup_data):
+            if self[col].backup_to(backup_data[col]):
                 res[col] = True
             else:
                 res[col] = False
@@ -177,16 +177,16 @@ class ExCollection(Collection):
         
         return self.index_information()
     
-    def backup_to(self, backup_data:ExDatabase, bach_size=1024):
+    def backup_to(self, backup_collection, bach_size=1024):
         try:
             res = []
             for data in self.find().batch_size(bach_size):
                 res.append(data)
                 if res % bach_size == 0 and res:
-                    backup_data.insert_many(res)
+                    backup_collection.insert_many(res)
                     res = []
             if len(res):
-                backup_data.insert_many(res)
+                backup_collection.insert_many(res)
             return True
         except Exception as e:
             tqdm.tqdm.write(str(e))
@@ -406,9 +406,9 @@ class Mon(MongoClient):
         if not filter_func:
             filter_func = self.default_fileter
         res = {}
-        for db in tqdm.tqdm(self.dbs, desc="backup %s -> %s"% (self.host,host)):
-            if filter_func(self, db):
-                r = self[db].backup_to(BackUpTo[self.host+"_"+db])
+        for db in tqdm.tqdm(self.dbs, desc="backup %s -> %s"% (self.address[0],host)):
+            if filter_func(db):
+                r = self[db].backup_to(BackUpTo[self.address[0]+"_"+db])
                 res[db] = r
         return res
 
