@@ -481,12 +481,12 @@ class Mon(MongoClient):
         cc = 0
         async for doc in col.find():
             if "system." in doc:continue
-            if len(res) % 2000 ==0 and len(res) > 0:
+            if len(res) % 500 ==0 and len(res) > 0:
                 fu = async_back_col.insert_many(res)
                 await self.deal_exception(fu)
-                tqdm.tqdm.write("%d/%d"%(2000 * cc, count))
+                tqdm.tqdm.write("%d/%d"%(500 * cc, count))
                 res = []
-                c += 1
+                cc += 1
             res.append(doc)
           
             if len(res) > 0:
