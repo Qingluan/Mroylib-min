@@ -471,6 +471,12 @@ class Mon(MongoClient):
                 await async_back_col.insert_many(res)
         except BulkWriteError as e:
             pass
+        except pymongo.errors.OperationFailure as e:
+            _, _, exc_tb = sys.exc_info()
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            l = exc_tb.tb_lineno
+            tqdm.tqdm.write(str(e)+ " %s:%d"% (fname, l))
+
         except Exception as e:
             _, _, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
