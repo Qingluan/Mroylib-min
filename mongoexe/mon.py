@@ -189,7 +189,8 @@ class ExCollection(Collection):
                 backup_collection.insert_many(res)
             return True
         except Exception as e:
-            tqdm.tqdm.write(str(e))
+            l = sys.exc_info()[2].tb_lineno
+            tqdm.tqdm.write(str(e) + ": %d" %l)
             return False
           
 
