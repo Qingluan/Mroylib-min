@@ -103,7 +103,6 @@ def main():
     
 
     if args.backup_mongo:
-        m = Mon(host=args.host, port=args.port, if_async=args.async_io)
         if args.async_io:
             if args.from_json_file and os.path.exists(args.from_json_file):
                 with open(args.from_json_file) as fp:
@@ -111,6 +110,7 @@ def main():
                     loop = asyncio.get_event_loop()
                     loop.run_until_complete(Mon.async_backup_to_another_hosts(*all_hosts, back_host=args.backup_host, back_port=args.backup_port))
             else:
+                m = Mon(host=args.host, port=args.port, if_async=args.async_io)
                 loop = asyncio.get_event_loop()
                 loop.run_until_complete(m.async_backup_to_another_host(host=args.backup_host, port=args.backup_port))
 

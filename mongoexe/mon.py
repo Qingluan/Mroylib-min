@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from qlib.data import Cache,dbobj
+import pymongo
 from pymongo import MongoClient, UpdateOne, InsertOne, DeleteOne, TEXT
 from pymongo.database import Database, Collection
 from pymongo.bulk import BulkWriteError
