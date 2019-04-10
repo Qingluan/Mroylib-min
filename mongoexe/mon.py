@@ -6,6 +6,7 @@ from pymongo.database import Database, Collection
 from pymongo.bulk import BulkWriteError
 from pymongo.errors import BulkWriteError
 from pymongo.cursor import Cursor
+import bson
 from bson import Code
 from bson.objectid import ObjectId
 import concurrent
@@ -455,7 +456,7 @@ class Mon(MongoClient):
             async for doc in col.find():
                 if len(res) % 2000 ==0 and len(res) > 0:
                     if count > 2000:
-                        insert_task = asyncio.ensure_future(async_back_col.insert_many(res, check_keys=False))
+                        insert_task = asyncio.ensure_future(async_back_col.insert_many(res))
                         tasks.append(insert_task)
                     else:
                         await async_back_col.insert_many(res)
@@ -468,7 +469,7 @@ class Mon(MongoClient):
                         processorBar.update(2000)
 
             if len(res) > 0:
-                await async_back_col.insert_many(res, check_keys=False)
+                await async_back_col.insert_many(res)
         except BulkWriteError as e:
             pass
         except pymongo.errors.OperationFailure as e:
