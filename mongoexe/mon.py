@@ -2,6 +2,7 @@
 from qlib.data import Cache,dbobj
 from pymongo import MongoClient, UpdateOne, InsertOne, DeleteOne, TEXT
 from pymongo.database import Database, Collection
+from pymongo.bulk import BulkWriteError
 from pymongo.errors import BulkWriteError
 from pymongo.cursor import Cursor
 from bson import Code
@@ -19,8 +20,14 @@ import zipfile
 from tempfile import NamedTemporaryFile
 from tempfile import TemporaryDirectory
 from functools import reduce
+import motor
+import motor.motor_asyncio
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from motor.motor_asyncio import AsyncIOMotorCursor
+from motor.motor_asyncio import AsyncIOMotorCollection
 import tqdm
 import sys
+import asyncio
 
 def json2xlsx(file, res, name="result"):
     workbook = xlwt.Workbook()
@@ -404,13 +411,24 @@ class ExCollection(Collection):
 
 class Mon(MongoClient):
 
-    def __init__(self, host=None, port=None, **kargs):
+    def __init__(self, host=None, port=None, if_async=False, **kargs):
         self._host = host
         super().__init__(host=host,port=port, **kargs)
+        if if_async:
+            self._c = motor.motor_asyncio.AsyncIOMotorClient(host=host, port=port, **kargs)
+            self.if_async = True
+        else:
+            self._c = None
+            self.if_async = False
 
     @property
     def show_dbs(self):
         return {i: self[i].command('dbstats')['storageSize']/ 1024**2  for i in self.dbs }
+    
+    @property
+    async def async_show_dbs(self):
+        return {i: (await self[i].command('dbstats'))['storageSize']/ 1024**2  for i in self.dbs }
+
 
     @property
     def dbs(self):
@@ -426,10 +444,69 @@ class Mon(MongoClient):
         if db_size < 100:
             return False
         return True
-        
+
+    async def  async_backup_to(self, col, async_back_col):
+        try:
+            res = []
+            tasks = []
+            count = await col.count_documents({})
+            
+            async for doc in col.find():
+                if len(res) % 2000 ==0 and len(res) > 0:
+                    if count > 2000:
+                        insert_task = asyncio.ensure_future(async_back_col.insert_many(res))
+                        tasks.append(insert_task)
+                    else:
+                        await async_back_col.insert_many(res)
+                    res = []
+                res.append(doc)
+            if count > 2000:
+                with  tqdm.tqdm(total=count, desc="count : %d"% count) as processorBar:
+                    for f in asyncio.as_completed(tasks):
+                        await f
+                        processorBar.update(2000)
+
+            if len(res) > 0:
+                await async_back_col.insert_many(res)
+        except BulkWriteError as e:
+            pass
+        except Exception as e:
+            _, _, exc_tb = sys.exc_info()
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            l = exc_tb.tb_lineno
+            tqdm.tqdm.write(str(e)+ " %s:%d"% (fname, l))
+            raise e
+    
+    @classmethod
+    async def async_backup_to_another_hosts(cls, *host_ports, back_host="localhost", back_port=27017,limit=10,**kargs):
+        tasks = []
+        for host,port in host_ports:
+            cs = cls(host=host, port=port, if_async=True)
+            tasks.append(asyncio.ensure_future(cs.async_backup_to_another_host(host=back_host, port=back_port, limit=limit, **kargs)))
+        for f in tqdm.tqdm(asyncio.as_completed(tasks), total=len(tasks), desc="All Process"):
+            await f
+
+    async def async_backup_to_another_host(self, host='localhost', port=27017, filter_func=None, limit=10,**kargs):
+        BackUpTo = Mon(host=host, port=port, if_async=self.if_async,**kargs)
+        try:
+            for db in self.dbs:
+                if db in ['config', 'admin']:continue
+                if (await self.async_show_dbs)[db] < limit:continue
+                adb = self._c[db]
+                tasks = []
+                backup_name = (self.address[0] + "_" + db).replace('.','_').lower()
+                tasks = []
+                for col in await adb.list_collection_names():
+                    task = asyncio.ensure_future(self.async_backup_to(adb[col], BackUpTo[backup_name][col]))
+                    tasks.append(task)
+                
+                for f in tqdm.tqdm(asyncio.as_completed(tasks), total=len(tasks), desc="%s.%s -> %s"%(self.address[0], db, host)):
+                    await f
+        except pymongo.errors.ServerSelectionTimeoutError:
+            tqdm.tqdm.write("%s:%d timeout" % (host, port))
     
     def backup_to_another_host(self, host='localhost', port=27017, filter_func=None, **kargs):
-        BackUpTo = Mon(host=host, port=port, **kargs)
+        BackUpTo = Mon(host=host, port=port, if_async=self.if_async,**kargs)
         if not filter_func:
             filter_func = self.default_fileter
         res = {}
@@ -678,7 +755,10 @@ class Mon(MongoClient):
             # print("[+]","insert:",cols_name,'len:', len(datas))
 
     def __getitem__(self, name):
-        return ExDatabase(self, name)
+        if self.if_async:
+            return AsyncIOMotorDatabase(self._c, name)
+        else:
+            return ExDatabase(self, name)
 
     def from_sql(self, database, keys=[], merge_key_json=None, merge_check=True,tp=None, **kargs):
         """

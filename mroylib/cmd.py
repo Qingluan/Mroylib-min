@@ -5,7 +5,8 @@ from mongoexe.mon import Mon
 import logging
 from termcolor import colored
 import chardet, os, sys
-
+import json
+import asyncio
 
 
 parser = ArgumentParser()
@@ -27,6 +28,9 @@ parser.add_argument("-D","--database", default='test4', help="set database")
 parser.add_argument("--user", default='root', help="set user")
 parser.add_argument("-p","--passwd", default='', help="set password")
 parser.add_argument("--table-name", default='export', help="set tablename, default: export")
+parser.add_argument("--from-json-file", default=None, help="from json file , use for -bm")
+parser.add_argument("-a","--async-io", action='store_true',default=False,  help="use asyncio mode")
+
 # parser.add_argument("--to-file", default='/tmp/output', help="set export file, use for --to-sqlite default: /tmp/output ")
 
 
@@ -99,5 +103,16 @@ def main():
     
 
     if args.backup_mongo:
-        m = Mon(host=args.host, port=args.port)
-        m.backup_to_another_host(host=args.backup_host, port=args.backup_port)
+        m = Mon(host=args.host, port=args.port, if_async=args.async_io)
+        if args.async_io:
+            if args.from_json_file and os.path.exists(args.from_json_file):
+                with open(args.from_json_file) as fp:
+                    all_hosts = [tuple(json.loads(i).values()) for i in fp.readlines()]
+                    loop = asyncio.get_event_loop()
+                    loop.run_until_complete(Mon.async_backup_to_another_hosts(*all_hosts, back_host=args.backup_host, back_port=args.backup_port))
+            else:
+                loop = asyncio.get_event_loop()
+                loop.run_until_complete(m.async_backup_to_another_host(host=args.backup_host, port=args.backup_port))
+
+        else:
+            m.backup_to_another_host(host=args.backup_host, port=args.backup_port)
