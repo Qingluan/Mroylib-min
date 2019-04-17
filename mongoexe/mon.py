@@ -480,11 +480,9 @@ class Mon(MongoClient):
         count = await col.count_documents({})
         cc = 0
         async for doc in col.find():
-            if "system." in doc:continue
             if len(res) % 500 ==0 and len(res) > 0:
                 fu = async_back_col.insert_many(res)
                 await self.deal_exception(fu)
-                tqdm.tqdm.write("%d/%d"%(500 * cc, count))
                 res = []
                 cc += 1
             res.append(doc)
@@ -501,6 +499,15 @@ class Mon(MongoClient):
             tasks.append(asyncio.ensure_future(cs.async_backup_to_another_host(host=back_host, port=back_port, limit=limit, **kargs)))
         for f in tqdm.tqdm(asyncio.as_completed(tasks), total=len(tasks), desc="All Process"):
             await f
+    
+    def show_back_up_progress(self, db,col=None):
+        if col:
+            if self.if_async:
+                loop = asyncio.new_event_loop()
+                f = loop.create_task(self[db][col].count())
+                c = loop.run_until_complete(f)
+                tqdm.tqdm.write("%s.%s : %d" % (db, col))
+                
 
     async def async_backup_to_another_host(self, host='localhost', port=27017, filter_func=None, limit=10,**kargs):
         BackUpTo = Mon(host=host, port=port, if_async=self.if_async,**kargs)
@@ -513,6 +520,7 @@ class Mon(MongoClient):
                 backup_name = (self.address[0] + "_" + db).replace('.','_').lower()
                 tasks = []
                 for col in await adb.list_collection_names():
+                    if 'system.' in col:continue
                     task = asyncio.ensure_future(self.async_backup_to(adb[col], BackUpTo[backup_name][col]))
                     tasks.append(task)
                 
