@@ -633,7 +633,7 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
                     if ii == 0:
                         i = i.split("(")[1]
                     k = i.split()[0]
-                    k = re.findall(r'(\w+)',k)[0]
+                    k = re.findall(r'([\w\-]+)',k)[0].replace('-','_')
                     if k == 'id':continue
 
                     if ')' in k:
@@ -718,9 +718,12 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
 
 
         for i,v in enumerate(res.fetchall()):
+            #import pdb;pdb.set_trace();
             # print(keys, v)
-            if len(keys) != len(v):
+            if len(keys) > len(v):
                 v = [i] + [ii for ii in v]
+            elif len(keys) < len(v):
+                keys.insert(0, "id")
             raw = dict(zip(keys,v))
             try:
                 o = obj(**raw)
@@ -1124,7 +1127,9 @@ def json_to_sql(table_name, json_file,map=None, handler=None,cache=None, **optio
         jh = handler(json_file)
         jh.cmdloop()
         for l in tqdm.tqdm(jh.tree.Out):
+            #import pdb;pdb.set_trace()
             cs.append(Obj.from_json(l))
+            #import pdb;pdb.set_trace()
     if cache and isinstance(cache, Cache):
         cache.save_all(*cs)
     elif isinstance(cache, str):
