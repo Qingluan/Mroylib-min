@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 
 setup(name='mroylib_min',
-    version='2.0.8.2',
+    version='2.0.9',
     description='some libs',
     url='https://github.com/Qingluan/.git',
     author='Qing luan',
@@ -11,7 +11,7 @@ setup(name='mroylib_min',
     include_package_data=True,
     zip_safe=False,
     packages=find_packages(),
-    install_requires=['tornado','tabulate', 'redis', 'pymysql','pymongo', 'xlrd','xlwt','bs4','requests','termcolor','simplejson','pysocks','telethon'],
+    install_requires=['tornado','motor','tabulate', 'redis', 'pymysql','pymongo','tqdm', 'xlrd','xlwt','bs4','requests','termcolor','simplejson','pysocks','telethon'],
     entry_points={
         'console_scripts' : [
             'Mr=mroylib.cmd:main',
