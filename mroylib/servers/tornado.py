@@ -30,11 +30,11 @@ controlll_tmp = """
 
 class -[name]-(Base):
     @check
-    def get(self):
-        return "Hello"
+    async def get(self):
+        return ["Hello"]
 
     @check
-    def post(self, name):
+    async def post(self, name):
         return "i got" + name
 """
 
@@ -42,11 +42,11 @@ auth_tmp = """
 
 class Login(Base):
     @check
-    def get(self):
+    async def get(self):
         return ["Hello"]
 
     @check
-    def post(self, user, passwd):
+    async def post(self, user, passwd):
         if not self.base_login(user, passwd):
             return self.redirect(self.settings['login_url'])
 
@@ -244,7 +244,7 @@ def background(func):
 def check(func):
 
     @wraps(func)
-    def _func(*args):
+    async def _func(*args):
         f = inspect.getfullargspec(func)
         self = args[0]
         val = [args[0]]
@@ -257,6 +257,8 @@ def check(func):
                 # print(self.request.body)
                 val.append(json.loads(self.request.body).get(k))
         res = func(*val)
+        if hasattr(res, 'cr_await'):
+            res = await res
         # print("return : ",res)
         # print(func.__name__.upper())
         if func.__name__ == 'get':
@@ -273,7 +275,6 @@ def check(func):
 
                 logging.error("must return str, list, dict!")
                 self.write("Handler return error!")
-                self.finish()
                 return 
 
         else:
@@ -281,7 +282,6 @@ def check(func):
                 self.write(res)
             else:
                 self.write(json.dumps(res))
-            self.finish()
 
     return _func
 
@@ -322,7 +322,7 @@ class Manifest(type):
             if _name == 'get' or _name == 'post':
 
                 fun = attrs[_name]
-                attrs[_name] = tornado.web.asynchronous(check(fun))
+                attrs[_name] = check(fun)
         return Ocl
 
 
