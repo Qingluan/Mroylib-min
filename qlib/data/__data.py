@@ -615,7 +615,7 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
         ks = {k: "%" + str(v) + "%" for k,v in args.items()}
         return self.query(obj, eq='like', **ks)
 
-    def query(self,obj, eq="=", m='or', timestamp=None,**kargs):
+    def join_query(self,obj, obj2, join='left', term="", eq="=", m='or', orderby='', limit='', extend="", timestamp=None,**kargs):
         """
         eq: like
             =
@@ -633,7 +633,139 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
                     if ii == 0:
                         i = i.split("(")[1]
                     k = i.split()[0]
-                    k = re.findall(r'([\w\-]+)',k)[0].replace('-','_')
+                    k = re.findall(r'(\w+)',k)[0]
+                    if k == 'id':continue
+
+                    if ')' in k:
+                        keys.append(k.replace(')',''))
+                    else:
+                        keys.append(k)
+            elif self.tp == 'mysql':
+                try:
+                    self._con.execute("desc %s" %obj.__name__)
+                    keys = [ i[0] for i in  self._con.fetchall()]
+                    self._con.execute("desc %s" %obj2.__name__)
+                    keys += [ i[0] for i in  self._con.fetchall()]
+
+                except Exception:
+                    return
+            else:
+                keys = []
+            if 'id' not in keys and 'uid' not in keys:
+                keys.insert(0,"id")
+        except TypeError as e:
+            # logging.error(e)
+            return 
+        
+        from_str1 = obj.__name__
+        if term != "":
+            from_str1 = term
+        join = {
+            'left':'left join',
+            'right':'right join',
+            'inner':'inner join'
+        }[join.strip()]
+        _query_str = "SELECT %s.*,%s.* FROM %s %s %s on " % (obj.__name__, obj2.__name__, from_str1, join, obj2.__name__)
+        
+        ## 
+        # this block is for parse timestamp
+        time_sec = None
+        if timestamp != None and isinstance(timestamp, str) :
+            err_time = 0
+            
+            while err_time < 3:
+                tody = time.gmtime(time.time())
+                pre_time = "%d-%d-%d " %(tody.tm_year,tody.tm_mon,tody.tm_mday)
+                try:
+                    if err_time == 0:
+                        time_sec = time.mktime(time.strptime(timestamp.strip(), "%Y-%m-%d %H:%M:%S"))
+                    elif err_time == 1:
+                        time_sec = time.mktime(time.strptime(pre_time + timestamp.strip(), "%Y-%m-%d %H:%M:%S"))
+                    elif err_time == 2:
+                        time_sec = time.mktime(time.strptime(pre_time + timestamp.strip()+":0", "%Y-%m-%d %H:%M:%S"))
+                    # print(time_sec)
+                except ValueError as  e:
+                    err_time += 1
+
+                    continue
+                
+                if time_sec:
+                    break
+        elif isinstance(timestamp, (int, float,)):
+            time_sec = timestamp
+
+        if time_sec:
+            kargs['time'] = int(time_sec)
+
+        for k,v  in kargs.items():
+
+            if isinstance(v, int):
+                if eq.startswith("~"):
+                    may_be = int(eq[1:])
+                    ww = ("(" + k + " > %d and " + k + " < %d ) %s") % ( v- may_be,v + may_be, m)
+                    
+                    _query_str +=   ww
+                    continue
+                
+                _query_str+= k + " %s%d %s " % (eq,v, m)
+            elif isinstance(v, str):
+                if eq == "like":
+                    _query_str+= k + " %s \"%%%s%%\" %s " % (eq,v, m)
+                else:
+                    _query_str+= k + " %s \"%s\" %s " % (eq,v, m)
+        orderby = "" if not orderby else "order by " + orderby
+        limit = "" if not limit else "limit " + limit
+        __query_str = _query_str.strip() + " %s %s %s;" % (extend, orderby, limit)
+        # print(__query_str)
+        if DEBUG:
+            logging.debug(__query_str)
+        try:
+            res = self._con.execute(__query_str)
+            if self.tp =='mysql':
+                res = self._con
+        except sqlite3.OperationalError:
+            logging.error("{}".format(__query_str))
+
+
+        for i,v in enumerate(res.fetchall()):
+            # print(keys, v)
+            if len(keys) != len(v):
+                v = [i] + [ii for ii in v]
+            raw = dict(zip(keys,v))
+            # print(raw)
+            try:
+                ObjCls = type(obj.__name__ + obj2.__name__, (dbobj,), {})
+                o = ObjCls(**raw)
+                # print(o)
+
+            except TypeError as e:
+
+                k = re.findall(r'argument \'(\w+)\'',e.args[0])[0]
+                v = raw.pop(k)
+                o = obj(**raw)
+                setattr(o, k, v)
+
+            yield o
+
+    def query(self,obj, eq="=", m='or', extend="", orderby='', limit='', timestamp=None,**kargs):
+        """
+        eq: like
+            =
+            >
+            <
+
+        m:  or
+            and
+        """
+
+        try:
+            if self.tp != "mysql":
+                keys = [ ]
+                for ii,i in enumerate(self._con.execute("select sql from sqlite_master where name=(?)", [obj.__name__]).fetchone()[0].split(",")):
+                    if ii == 0:
+                        i = i.split("(")[1]
+                    k = i.split()[0]
+                    k = re.findall(r'(\w+)',k)[0]
                     if k == 'id':continue
 
                     if ')' in k:
@@ -706,7 +838,9 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
                     _query_str+= k + " %s \"%%%s%%\" %s " % (eq,v, m)
                 else:
                     _query_str+= k + " %s \"%s\" %s " % (eq,v, m)
-        __query_str = _query_str.strip()[:-len(m)] + ";"
+        orderby = "" if not orderby else "order by " + orderby
+        limit = "" if not limit else "limit " + limit
+        __query_str = _query_str.strip()[:-len(m)] + " %s;" % (extend, orderby, limit)
         if DEBUG:
             logging.debug(__query_str)
         try:
@@ -718,7 +852,6 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
 
 
         for i,v in enumerate(res.fetchall()):
-            #import pdb;pdb.set_trace();
             # print(keys, v)
             if len(keys) > len(v):
                 v = [i] + [ii for ii in v]
