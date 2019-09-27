@@ -1,8 +1,9 @@
 import concurrent
 import asyncio
 import time
+import json
 from termcolor import colored
-# import threading
+from qlib.data import Cache, dbobj
 
 import aiohttp
 
@@ -38,9 +39,10 @@ class Aio:
                 time.sleep(0.3)
                 continue
             if isinstance(msg, str):
+                print(self.name, "callback: Stop")
                 break
             else:
-                print('after:',msg)
+                # print('after:',msg)
                 if msg['tp'] == 'todo':
                     self.queue.put_nowait(msg)
                     time.sleep(0.4)
@@ -64,6 +66,8 @@ class Aio:
     async def _handle(self, queue, msg):
         try:
             result = await self.handle(msg)
+            if not result:
+                return
             if not isinstance(result, dict):
                 res = {'tp': "show", "result": result}
             else:
@@ -91,6 +95,7 @@ class Aio:
 
     @classmethod
     async def loop(cls):
+        END_ALL = False
         while 1:
             tasks = []
             for name in Aio.RUN_DEAL_QUEUES:
@@ -98,18 +103,22 @@ class Aio:
                 if not queue.empty():
                     msg = await queue.get()
                     if isinstance(msg, str):
-                        break
+                        queue.put_nowait("End")
+                        END_ALL = True
+                        continue
                     if msg['tp'] != 'todo':
                         queue.put_nowait(msg)
                     else:
                         handle = Aio.CALLBACKS[name]
-                        print(name, "recv:", msg)
+                        print(name, "recv:")
                         tasks.append(asyncio.Task(handle(queue, msg)))
                         # await asyncio.sleep(0.1)
             if len(tasks) >0:
                 await asyncio.gather(*tasks)
             else:
                 time.sleep(0.1)
+            if END_ALL:
+                break
 
     @classmethod
     def Stop(cls):
@@ -219,4 +228,32 @@ class Http(Aio):
     def after(self, msg):
         raise NotImplementedError("must how to deal")
 
+
+class SaveAsJson(Aio):
+    
+    def __init__(self, save_json_file):
+        super().__init__()
+        self.save_json_file = save_json_file
+
+    async def handle(self, msg):
+        if 'data' in msg:
+            data = msg['data']
+            assert isinstance(data, dict) is True
+            if 'dest' in msg:
+                with open(msg['dest'], 'a+') as fp:
+                    fp.write(json.dumps(data))
+            else:
+                with open(self.save_json_file, 'a+') as fp:
+                    fp.write(json.dumps(data))
+    
+    def after(self, msg):
+        pass
+
+
+# class SaveAsSqlite(Aio):
+#     def __init__(self, db):
+#         super().__init__()
+#         self.db = db
         
+
+#     async def handle(self, msg)
