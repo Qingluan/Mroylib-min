@@ -3,10 +3,10 @@ from io import  TextIOWrapper
 from termcolor import colored
 from functools import wraps
 from .__log import LogControl, INFO, OK, ERR, FAIL, WRN, tag_print, L, show
-from .__multiprint import Printers
+
 
 __all__ = [
-    "LogControl", "INFO", "OK", "ERR", "FAIL" , "WRN", "tag_print", "L", "show","logging", "Printers"
+    "LogControl", "INFO", "OK", "ERR", "FAIL" , "WRN", "tag_print", "L", "show","logging"
 ]
 
 

@@ -4,7 +4,7 @@ import time
 import json
 from termcolor import colored
 from qlib.data import Cache, dbobj
-from qlib.log import Printers
+
 import aiohttp
 
 class Aio:
@@ -17,9 +17,6 @@ class Aio:
     @property
     def name(self):
         return self.__class__.__name__
-    
-    def print(self, msg):
-        Printers.print(self.name, msg)
 
     def get_queue(self, name):
         return Aio.RUN_DEAL_QUEUES.get(name)
@@ -29,11 +26,11 @@ class Aio:
 
     async def show(self, msg):
         del msg['tp']
-        self.print(msg['tp'])
+        print(msg)
 
     def loop_callback(self):
         queue = self.get_queue(self.name)
-        self.print("loop-callback")
+        print("loop-callback:", self.name)
         while 1:
             msg = {}
             if not queue.empty():
@@ -42,7 +39,7 @@ class Aio:
                 time.sleep(0.3)
                 continue
             if isinstance(msg, str):
-                self.print("callback: Stop")
+                print(self.name, "callback: Stop")
                 break
             else:
                 # print('after:',msg)
@@ -99,7 +96,6 @@ class Aio:
     @classmethod
     async def loop(cls):
         END_ALL = False
-        last_time = time.time()
         while 1:
             tasks = []
             for name in Aio.RUN_DEAL_QUEUES:
@@ -114,12 +110,11 @@ class Aio:
                         queue.put_nowait(msg)
                     else:
                         handle = Aio.CALLBACKS[name]
-                        Printers.print(name, "recv:", *list(msg.keys()))
+                        print(name, "recv:")
                         tasks.append(asyncio.Task(handle(queue, msg)))
                         # await asyncio.sleep(0.1)
-            if len(tasks) >20 or time.time() - last_time > 3:
+            if len(tasks) >0:
                 await asyncio.gather(*tasks)
-                last_time = time.time()
             else:
                 time.sleep(0.1)
             if END_ALL:
@@ -128,10 +123,9 @@ class Aio:
     @classmethod
     def Stop(cls):
         for name, queue in Aio.RUN_DEAL_QUEUES.items():
-            Printers.print(name,"Stop :")
+            print("Stop :", name)
             queue.put_nowait("Stop")
             queue.put_nowait("Stop")
-        Printers.stop()
         Aio.Pro.shutdown()
     # async def loop(self):
     #     queue = self.get_queue(self.name)    
@@ -170,16 +164,13 @@ class Aio:
         try:
             loop.run_until_complete(Aio.loop())
         except Exception as e:
-            raise e
+            print(e)
     
     @classmethod
     def regist(cls, instance):
-        
         if 'ErrHandle' not in Aio.RUN_DEAL_QUEUES:
-            Printers.regist('ErrHandle', color='red', attrs=['underline'])
             raise Exception("must ensure Err handle")
         cls.Pro.submit(instance.loop_callback)
-        Printers.regist(instance.name)
 
 
     @classmethod
@@ -195,11 +186,10 @@ class Aio:
 
 class ErrHandle(Aio):
     async def handle(self, msg):
-        self.print(msg)
+        print(colored("[Err]", 'red'), colored(msg['msg'],'red', attrs=['underline']))
     
     def after(self, msg):
-        self.print(msg)
-        
+        print(colored("[Err]", 'red'), colored(msg['msg'],'red', attrs=['underline']))
 
 def regist(cls, *args, **kargs):
     if 'ErrHandle' not in Aio.RUN_DEAL_QUEUES:

@@ -1,0 +1,47 @@
+<script type="text/javascript">
+	Bgc = ["rgba(255, 99, 132, 0.5)","rgba(255, 159, 64, 0.5)","rgba(255, 205, 86, 0.5)","rgba(75, 192, 192, 0.5)","rgba(54, 162, 235, 0.5)","rgba(153, 102, 255, 0.5)","rgba(201, 203, 207, 0.5)"]
+    Bc = ["rgb(255, 99, 132)","rgb(255, 159, 64)","rgb(255, 205, 86)","rgb(75, 192, 192)","rgb(54, 162, 235)","rgb(153, 102, 255)","rgb(201, 203, 207)",]
+    
+    function update_data(title, labels, datas, type){
+        if (type == null){
+            type = "horizontalBar";
+        }
+        document.getElementById("{{id}}").innerHTML = '<canvas style="max-height: 90%; -webkit-transform: translate(50%,0%);transform: translate(50%,0%); max-width: 700px" class="bar-table" width="400" height="400"></canvas>'
+        var ctx =  document.getElementsByTagName("canvas")[0];
+    	console.log("stat")
+    	bc = []
+    	bgc = []
+    	for(i = 0; i< labels.length; i++){
+    		bgc.push( Bgc[i % 7]);
+    		bc.push( Bc[i % 7]);
+    	}
+        filld = false
+        if (type == 'radar'){
+            filld = true
+        }
+    	new Chart(ctx,{
+        	"type": type,
+        	"data":{
+            	"labels": labels,
+            	"datasets":[
+   					{
+	                    "label":title,
+	                    "data":datas,
+	                    "fill":filld,
+	                    "backgroundColor":bgc,
+	                    "borderColor":bc,
+	                    "borderWidth":1
+            		}
+            	]
+            },
+            "options":{
+            	"scales":{
+            		"xAxes":[
+            			{"ticks":{"beginAtZero":true}}
+            		]
+            	}
+            }
+        });	
+    }
+    
+</script>
