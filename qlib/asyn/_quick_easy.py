@@ -173,13 +173,13 @@ class Aio:
             raise e
     
     @classmethod
-    def regist(cls, instance):
+    def regist(cls, instance, color='yellow', attrs=[]):
         
         if 'ErrHandle' not in Aio.RUN_DEAL_QUEUES:
             Printers.regist('ErrHandle', color='red', attrs=['underline'])
             raise Exception("must ensure Err handle")
         cls.Pro.submit(instance.loop_callback)
-        Printers.regist(instance.name)
+        Printers.regist(instance.name, color=color, attrs=attrs)
 
 
     @classmethod
@@ -201,12 +201,12 @@ class ErrHandle(Aio):
         self.print(msg)
         
 
-def regist(cls, *args, **kargs):
+def regist(cls, *args, color='yellow', attrs=[], **kargs):
     if 'ErrHandle' not in Aio.RUN_DEAL_QUEUES:
         errH = ErrHandle()
         Aio.regist(errH)
     instance = cls(*args, **kargs)
-    Aio.regist(instance)
+    Aio.regist(instance, color=color, attrs=attrs)
 
 
 # Example

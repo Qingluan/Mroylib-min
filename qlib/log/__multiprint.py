@@ -7,7 +7,7 @@ from termcolor import colored
 
 class _Printer:
 
-    def __init__(self, name, color=None, **attrs):
+    def __init__(self, name, color="yellow", **attrs):
         self.index = 0
         self.name = name
         self._position = 1
@@ -15,6 +15,7 @@ class _Printer:
         self._last_msg = ""
         self._attrs = attrs
         self._color = color
+        self._times = 0
 
     def _print(self):
         if self.index == 0 and self._position > 0:
@@ -26,8 +27,8 @@ class _Printer:
             m = colored(self._last_msg, self._color, attrs=self._attrs)
         else:
             m = colored(self._last_msg, attrs=self._attrs)
-        print(colored("[%s]" % self.name, "red"), m)
-    
+        print(colored("[%s]" % self.name, "green"), colored("[%d]" % self._times, 'blue'), m)
+
     def add_position(self):
         self._position += 1
 
@@ -78,6 +79,7 @@ class Printers:
                 if found == True:
                     for p in cls._Process.values():
                         p._print()
+                        p._times += 1
                     found = False
             
                 time.sleep(cls.interval)
