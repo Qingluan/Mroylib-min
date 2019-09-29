@@ -7,7 +7,7 @@ from termcolor import colored
 
 class _Printer:
 
-    def __init__(self, name, color="yellow", **attrs):
+    def __init__(self, name, color="yellow", attrs=[]):
         self.index = 0
         self.name = name
         self._position = 1
@@ -42,8 +42,8 @@ class Printers:
         return  iter(self._Process)
     
     @classmethod
-    def regist(cls,  name, color=None,**attrs):
-        P = _Printer(name, color=color, **attrs)
+    def regist(cls,  name, color=None,attrs=[]):
+        P = _Printer(name, color=color, attrs=attrs)
         P.index = len(cls._Process)
         cls._Process[name] = P
         for p in cls._Process.values():
