@@ -1,6 +1,6 @@
 from argparse import ArgumentParser
 from qlib.log import log
-from qlib.data import Cache,mysql_to_sqlite,sqlite_to_mysql, json_to_sql
+from qlib.data import Cache,mysql_to_sqlite,sqlite_to_mysql, json_to_sql, xlsx_to_es
 from mroylib.tools.transform import JsonTreeListHandleCmd
 from mongoexe.mon import Mon
 import logging
@@ -9,14 +9,15 @@ import chardet, os, sys
 import json
 import asyncio
 import tqdm
-from concurrent.futures.process import ProcessPoolExecutor
+from concurrent.futures.thread import ThreadPoolExecutor
 
 
 parser = ArgumentParser()
 
 parser.add_argument("file_or_obj", nargs='*', help=" file or some object to handle\n\t can import excel -> elasticsearch\n\t sqlite -> elasticsearch\n\t mysql -> sqlite \n\t file.sql[mysql] / file.db[sqlite] /excel.xlsx[excel] -> elasticsearch")
 parser.add_argument("-e","--encoding"  , default=None, help="change encoding: utf , gbk, ...")
-parser.add_argument("--to-elasticsearch", action='store_true',default=False, help="import sql files to elastic search ...")
+parser.add_argument("--root" , default=None, help="walk for root path")
+parser.add_argument("-toes","--to-elasticsearch", action='store_true',default=False, help="import sql files to elastic search ...")
 parser.add_argument("--to-sqlite", action='store_true',default=False,  help="files to sqlite ...")
 parser.add_argument("--to-mysql", action='store_true',default=False,  help="files to mysql  ...")
 parser.add_argument('-bm', "--backup-mongo", action='store_true',default=False,  help="mode to backup mongo. exm: -bm -H remote.ip -P port -p pass -bH backup.ip -bP backup.port -bp backup.pass")
@@ -70,32 +71,54 @@ def main():
     #             e = chardet.detect(ws)
     #             logging.info(str(e))
             # logging.info("wbt")
-    if args.encoding:
+    # if args.encoding:
                         
                 
-        if not ws or not e:
-            logging.error("not load success")
-            return 
+    #     if not ws or not e:
+    #         logging.error("not load success")
+    #         return 
 
-        with open(args.file_or_obj + ".bak", 'wb') as fp2:
-            fp2.write(ws.decode(e['encoding']).encode(args.encoding))
+    #     with open(args.file_or_obj + ".bak", 'wb') as fp2:
+    #         fp2.write(ws.decode(e['encoding']).encode(args.encoding))
             
-        logging.info(e['encoding'] + ' -> ' + args.encoding )
+    #     logging.info(e['encoding'] + ' -> ' + args.encoding )
 
     if args.to_elasticsearch:
-        with ProcessPoolExecutor( max_workers=4) as process:
+        
+        with ThreadPoolExecutor( max_workers=2) as process:
+            if not args.file_or_obj and args.root:
+                for root, ds, fs in os.walk(args.root):
+                    for path in fs:
+                        f = os.path.join(root, path)
+                        if not os.path.exists(f):continue
+                        
+                        if f.endswith(".xlsx"):
+                            print("{} -> {}".format(f, args.url))
+                            ca = Cache.load_xlsx(f)
+                            process.submit(ca.export_to_es_all,args.url)
+                        elif f.endswith(".csv") or f.endswith(".txt"):
+                            print("{} -> {}".format(f, args.url))
+                            process.submit(Cache.load_csv_to_es, f, args.url)
+                            
+                        elif f.endswith(".db") or f.endswith(".sql"):
+                            print("{} -> {}".format(f, args.url))
+                            process.submit(Cache.export_to_es_from_db_file,f, args.url)
+                        else:continue
+                process.shutdown()
+                sys.exit(0)
+
             for f in args.file_or_obj:
                 if not os.path.exists(f):continue
                 print("{} -> {}".format(f, args.url))
                 if f.endswith(".xlsx"):
-                    ca = Cache.load_xlsx(f)
-                    process.submit(ca.export_to_es_all,args.url)
+                    
+                    process.submit(xlsx_to_es,f, host=args.url)
                 elif f.endswith(".csv") or f.endswith(".txt"):
                     process.submit(Cache.load_csv_to_es, f, args.url)
                     
                 elif f.endswith(".db") or f.endswith(".sql"):
                     process.submit(Cache.export_to_es_from_db_file,f, args.url)
-            process.shutdown()
+            # process.shutdown()
             
             # elif f.endswith(".sql"):
             #     if not args.passwd:

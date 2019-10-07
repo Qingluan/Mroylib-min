@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 
 setup(name='mroylib_min',
-    version='2.2.0',
+    version='2.2.2',
     description='some libs',
     url='https://github.com/Qingluan/.git',
     author='Qing luan',

@@ -1181,43 +1181,57 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
             xlsx_to_sql(xls_files, f.name)
             cl = cls(f.name)
             return cl
+    
+
     @classmethod
     def load_csv_to_es(cls, csv_file, url):
-        tmp_file ="/tmp/%s.sql_to_es" % time.time()
+        # tmp_file ="/tmp/%s.sql_to_es" % time.time()
 
-        cl = cls(tmp_file)
-        with open(csv_file) as f:
+        # cl = cls(tmp_file)
+        endpoint = url + "/_bulk"
+        with open(csv_file, encoding="utf-8") as f:
             dd = csv.DictReader(f)
-            csv_obj = os.path.basename(csv_file).replace(" ", "_").replace(".", "_")
-            Obj = type(csv_obj, (dbobj,), {})
-            cs = []
-            print("load to tmp db file ... ", csv_obj)
+            csv_obj = os.path.basename(csv_file).replace(" ", "_").replace(".", "_").lower()
             c = 0
-            for obj in dd :
-                # print(obj)
-                w = dict(obj)
-                if 'id' in w:
-                    w.pop('id')
-                cc = Obj(**w)
-                # print(cc)
-                cs.append(cc)
-                # print(cs)
-                c+=1
-                if len(cs) % 1001 == 0 and len(cs) != 0:
-                    try:
-                        cl.save_all(*cs)
-                        print("to sql :",c, end='\r')
-                        cs = []
+            res = ""
+            try:
+                for id, obj in enumerate(dd):
+                    # print(obj)
+                    o = dict(obj)
+                    o["id"] = id
+                        
+                    if None in o:
+                        o.pop(None)
+                    type_name = csv_obj
+                    index = csv_obj
+                    
+                    
+                    try:    
+                        v = json.dumps(o)
+                        res += '{ "index" : { "_index" : "%s", "_type" : "%s", "_id" : "%s" } }\n' % (index, type_name, o["id"])
+                        res += v +"\n"
+                        c += 1
+                        # print("[merge : %d]" % c, end='\r')
+                        if c % 2000 == 0:
+                            r = requests.post(endpoint, data=res.encode("utf-8"), headers={'content-type':'application/json;charset=UTF-8'}).json()
+                            result = sum([i['index']['_shards']['successful'] for i in r['items']])
+                            res = ""
+                            print("import to es : ",result, end='\r')
+                        
                     except Exception as e:
                         print(e)
-            if len(cs) > 0:
-                try:
-                    cl.save_all(*cs)
-                except Exception as e:
-                    print(e)
-                print("to sql :",c, end='\r')
-        cce = cls(tmp_file)
-        cce.export_to_es_all(host=url)
+                
+                if res != "":
+                    # print("[merge : %d]" % c, end='\r')
+                    logging.info("prepare finish {c} , data -> {endpoint}".format(c=c,endpoint=endpoint))
+                    r = requests.post(endpoint, data=res.encode("utf-8"), headers={'content-type':'application/json;charset=UTF-8'}).json()
+                    result = sum([i['index']['_shards']['successful'] for i in r['items']])
+                    # print(csv_obj,"import to es : ",result)
+                    print("import to es : ",result)
+            except Exception as e:
+                print(e)
+        
+        
 
     # def from_csv(self, csv_file, create_db_file=None):
     #     if not create_db_file:
@@ -1322,6 +1336,63 @@ def json_to_sql(table_name, json_file,map=None, handler=None,cache=None, **optio
             c.save_all(*cs)
     return cs
 
+def xlsx_to_es(file, granularity=20, host="http://localhost:9200"):
+    endpoint = host + "/_bulk"
+    sheets = xlrd.open_workbook(file)
+    for table in  sheets.sheets():
+        table_name = table.name
+        rows = table.nrows
+        cols = table.ncols
+        fields = [str(i.value) for i in table.row(0)]
+        Obj = type(table_name, (dbobj,), {})
+        logging.info(Obj.__name__)
+        all_sql_objs = []
+        print("table : ",table_name.replace(".", "_").replace(" ","_").lower())
+
+        res = ""
+        c = 0
+        for id,i in enumerate(range(1, rows)):
+
+            o = dict(zip(fields, [i.value for i in table.row(i)]))
+            o["id"] = id
+            if None in o:
+                o.pop(None)
+            type_name = table_name.replace(".", "_").replace(" ","_").lower()
+            index = type_name
+            
+            
+            try:    
+                v = json.dumps(o)
+                res += '{ "index" : { "_index" : "%s", "_type" : "%s", "_id" : "%s" } }\n' % (index, type_name, o["id"])
+                res += v +"\n"
+                c += 1
+                # print("[merge : %d]" % c, end='\r')
+                if c % 2000 == 0:
+                    r = requests.post(endpoint, data=res.encode("utf-8"), headers={'content-type':'application/json;charset=UTF-8'}).json()
+                    try:
+                        result = sum([i['index']['_shards']['successful'] for i in r['items']])
+                        res = ""
+                        print("import to es : ",result, end='\r')
+                    except  Exception as e:
+                        import pdb;pdb.set_trace()
+                
+            except Exception as e:
+                print(e)
+        
+        if res != "":
+            # print("[merge : %d]" % c, end='\r')
+            logging.info("prepare finish {c} , data -> {endpoint}".format(c=c,endpoint=endpoint))
+            r = requests.post(endpoint, data=res.encode("utf-8"), headers={'content-type':'application/json;charset=UTF-8'}).json()
+            result = sum([i['index']['_shards']['successful'] for i in r['items']])
+            # print(csv_obj,"import to es : ",result)
+            print("import to es : ",result)
+        #     all_sql_objs.append(o)
+        #     if len(all_sql_objs) >= granularity:
+        #         yield all_sql_objs
+        #         all_sql_objs = []
+
+        # if len(all_sql_objs) != 0:
+        #     yield all_sql_objs
 
 def open_xlsx(file, granularity=20):
     sheets = xlrd.open_workbook(file)
