@@ -5,6 +5,7 @@ import contextlib
 from tempfile import TemporaryFile, NamedTemporaryFile
 import re
 import json
+
 # import requests
 DEBUG = False
 
@@ -840,7 +841,7 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
                     _query_str+= k + " %s \"%s\" %s " % (eq,v, m)
         orderby = "" if not orderby else "order by " + orderby
         limit = "" if not limit else "limit " + limit
-        __query_str = _query_str.strip()[:-len(m)] + " %s;" % (extend, orderby, limit)
+        __query_str = _query_str.strip()[:-len(m)] + " %s %s %s;" % (extend, orderby, limit)
         if DEBUG:
             logging.debug(__query_str)
         try:
@@ -948,6 +949,7 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
         index = obj.__name__.lower()
         res = requests.put(host + "/" + index).json()
         if 'error' in res:
+            print(res)
             # res['error']['root_cause']
             pass
             # logging.error(str(res))
@@ -956,27 +958,38 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
         endpoint = host + "/_bulk"
         res = ""
         c = 0
-        print(type(obj), obj.__name__)
-        for i,o in enumerate(self.query(obj)):
-            # print(o)
+        print("load from db:" ,obj.__name__)
+        try:
+            for i,o in enumerate(self.query(obj)):
+                # print(o.get_dict())
 
-            v = json.dumps(o.get_dict())
-            res += '{ "index" : { "_index" : "%s", "_type" : "%s", "_id" : "%s" } }\n' % (index, type_name, o.id)
-            res += v +"\n"
-            c += 1
-            print("[merge : %d]" % c, end='\r')
-            if i % 50000 == 0:
+                v = json.dumps(o.get_dict())
+                res += '{ "index" : { "_index" : "%s", "_type" : "%s", "_id" : "%s" } }\n' % (index, type_name, o.id)
+                res += v +"\n"
+                c += 1
+                print("[merge : %d]" % c, end='\r')
+                if i % 2000 == 0:
+                    requests.post(endpoint, data=res, headers={'content-type':'application/json;charset=UTF-8'}).json()
+                    res = ""
+            if res != "":
+                print("[merge : %d]" % c, end='\r')
+                logging.info("prepare finish {c} , data -> {endpoint}".format(c=c,endpoint=endpoint))
                 requests.post(endpoint, data=res, headers={'content-type':'application/json;charset=UTF-8'}).json()
-                res = ""
+        except Exception as e:
+            print(e)
+        return c
+        
         # print(res)
-        logging.info("prepare finish {c} , data -> {endpoint}".format(c=c,endpoint=endpoint))
-        return requests.post(endpoint, data=res, headers={'content-type':'application/json;charset=UTF-8'}).json()
+        
+        # return requests.post(endpoint, data=res, headers={'content-type':'application/json;charset=UTF-8'}).json()
 
     def export_to_es_all(self, host="http://localhost:9200"):
         # with ThreadPoolExecutor(10) as exe:
         if 1:
             tables = self.ls()
             for table in tables:
+                if table == 'sqlite_sequence' :continue
+                print(table , "->", host)
                 ObjCls = type(table, (dbobj,), {})
                 res = self.export_to_es(ObjCls, host=host)
                 print(res)
@@ -1168,6 +1181,43 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
             xlsx_to_sql(xls_files, f.name)
             cl = cls(f.name)
             return cl
+    @classmethod
+    def load_csv_to_es(cls, csv_file, url):
+        tmp_file ="/tmp/%s.sql_to_es" % time.time()
+
+        cl = cls(tmp_file)
+        with open(csv_file) as f:
+            dd = csv.DictReader(f)
+            csv_obj = os.path.basename(csv_file).replace(" ", "_").replace(".", "_")
+            Obj = type(csv_obj, (dbobj,), {})
+            cs = []
+            print("load to tmp db file ... ", csv_obj)
+            c = 0
+            for obj in dd :
+                # print(obj)
+                w = dict(obj)
+                if 'id' in w:
+                    w.pop('id')
+                cc = Obj(**w)
+                # print(cc)
+                cs.append(cc)
+                # print(cs)
+                c+=1
+                if len(cs) % 1001 == 0 and len(cs) != 0:
+                    try:
+                        cl.save_all(*cs)
+                        print("to sql :",c, end='\r')
+                        cs = []
+                    except Exception as e:
+                        print(e)
+            if len(cs) > 0:
+                try:
+                    cl.save_all(*cs)
+                except Exception as e:
+                    print(e)
+                print("to sql :",c, end='\r')
+        cce = cls(tmp_file)
+        cce.export_to_es_all(host=url)
 
     # def from_csv(self, csv_file, create_db_file=None):
     #     if not create_db_file:

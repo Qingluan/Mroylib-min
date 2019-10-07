@@ -8,6 +8,8 @@ from termcolor import colored
 import chardet, os, sys
 import json
 import asyncio
+import tqdm
+from concurrent.futures.process import ProcessPoolExecutor
 
 
 parser = ArgumentParser()
@@ -55,18 +57,18 @@ def main():
     
     args = parser.parse_args()
     e = None
-    name_tps = {n: check_file_tp(n) for n in args.file_or_obj}
-    if args.file_or_obj:
-        _f = args.file_or_obj[0]
-        args.from_type = name_tps.get(_f,'mysql')
-        print("from-type:", args.from_type)
-    for f in args.file_or_obj:
-        if os.path.exists(f):
-            os.system("file " + f)
-            with open(f, "rb") as fp:
-                ws = fp.read(2000)
-                e = chardet.detect(ws)
-                logging.info(str(e))
+    # name_tps = {n: check_file_tp(n) for n in args.file_or_obj}
+    # if args.file_or_obj:
+    #     _f = args.file_or_obj[0]
+    #     args.from_type = name_tps.get(_f,'mysql')
+    #     print("from-type:", args.from_type)
+    # for f in args.file_or_obj:
+    #     if os.path.exists(f):
+    #         os.system("file " + f)
+    #         with open(f, "rb") as fp:
+    #             ws = fp.read(2000)
+    #             e = chardet.detect(ws)
+    #             logging.info(str(e))
             # logging.info("wbt")
     if args.encoding:
                         
@@ -81,29 +83,37 @@ def main():
         logging.info(e['encoding'] + ' -> ' + args.encoding )
 
     if args.to_elasticsearch:
-        for f in args.file_or_obj:
-            if f.endswith(".xlsx"):
-                ca = Cache.load_xlsx(f)
-                ca.export_to_es_all(args.url)
-            elif f.endswith(".db"):
-                Cache.export_to_es_from_db_file(f, args.url)
-            elif f.endswith(".sql"):
-                if not args.passwd:
-                    p = ""
-                else:
-                    p = "-p{}".format(args.passwd)
-                try:
-                    os.popen("echo create database {} | mysql -u{} {} ".format(args.database,args.user,p)).read()
-                except:
-                    pass
-                finally:
-                    os.popen("mysql -u{} {} {} < {}".format(args.user,p,args.database, f)).read()
-                    print(colored(" data --->  mysql", 'green'))
-                    ca = Cache(args.database, user=args.user, password=args.passwd, tp='mysql')
-                    print(colored(" data --->  mysql --> elasticsearch", 'green'))
-                    ca.export_to_es_all(args.url)
+        with ProcessPoolExecutor( max_workers=4) as process:
+            for f in args.file_or_obj:
+                if not os.path.exists(f):continue
+                print("{} -> {}".format(f, args.url))
+                if f.endswith(".xlsx"):
+                    ca = Cache.load_xlsx(f)
+                    process.submit(ca.export_to_es_all,args.url)
+                elif f.endswith(".csv") or f.endswith(".txt"):
+                    process.submit(Cache.load_csv_to_es, f, args.url)
+                    
+                elif f.endswith(".db") or f.endswith(".sql"):
+                    process.submit(Cache.export_to_es_from_db_file,f, args.url)
+            process.shutdown()
+            
+            # elif f.endswith(".sql"):
+            #     if not args.passwd:
+            #         p = ""
+            #     else:
+            #         p = "-p{}".format(args.passwd)
+            #     try:
+            #         os.popen("echo create database {} | mysql -u{} {} ".format(args.database,args.user,p)).read()
+            #     except:
+            #         pass
+            #     finally:
+            #         os.popen("mysql -u{} {} {} < {}".format(args.user,p,args.database, f)).read()
+            #         print(colored(" data --->  mysql", 'green'))
+            #         ca = Cache(args.database, user=args.user, password=args.passwd, tp='mysql')
+            #         print(colored(" data --->  mysql --> elasticsearch", 'green'))
+            #         ca.export_to_es_all(args.url)
 
-            print("{} -> {}".format(f, args.url))
+            
         sys.exit(0)
     elif args.to_sqlite:
         if args.from_type == "json":
@@ -136,3 +146,7 @@ def main():
 
         else:
             m.backup_to_another_host(host=args.backup_host, port=args.backup_port)
+
+
+if __name__ == "__main__":
+    main()
