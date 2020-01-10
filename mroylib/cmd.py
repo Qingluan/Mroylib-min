@@ -1,6 +1,6 @@
 from argparse import ArgumentParser
 from qlib.log import log
-from qlib.data import Cache,mysql_to_sqlite,sqlite_to_mysql, json_to_sql, xlsx_to_es, from_json_to_es, json_to_es
+from qlib.data import Cache,mysql_to_sqlite,sqlite_to_mysql, json_to_sql, xlsx_to_es, json_to_es
 from mroylib.tools.transform import JsonTreeListHandleCmd
 from mongoexe.mon import Mon
 import logging
@@ -120,26 +120,25 @@ def main():
                 elif f.endswith(".db"):
                     process.submit(Cache.export_to_es_from_db_file,f, args.url)
                 elif f.endswith(".json"):
-                    
-                    # from_json_to_es(f, args.url)
                     json_to_es(f)
-                    
-                
                 elif f.endswith(".sql"):
                     if not args.passwd:
                         p = ""
                     else:
                         p = "-p{}".format(args.passwd)
                     try:
-                        os.popen("echo create database {} | mysql -u{} {} ".format(args.database,args.user,p)).read()
-                    except:
-                        pass
+                        data_file_name = "data_" + os.path.basename(f).replace(".","_").replace(" ","_").lower()
+                        os.popen("echo create database {} | mysql -u{} {} ".format(data_file_name,args.user,p)).read()
+                    except Exception as e:
+                        print(e)
                     finally:
+                    
                         os.popen("mysql -u{} {} {} < {}".format(args.user,p,args.database, f)).read()
-                        print(colored(" data --->  mysql", 'green'))
-                        ca = Cache(args.database, user=args.user, password=args.passwd, tp='mysql')
-                        print(colored(" data --->  mysql --> elasticsearch", 'green'))
-                        ca.export_to_es_all(args.url)
+                        print(colored(" data %s --->  mysql"% data_file_name, 'green'))
+                        ca = Cache(data_file_name, user=args.user, password=args.passwd, tp='mysql')
+                        print(colored(" data %s --->  mysql --> elasticsearch" % data_file_name, 'green'))
+                        index = data_file_name
+                        ca.export_to_es_all(args.url, index=index)
 
             
         sys.exit(0)

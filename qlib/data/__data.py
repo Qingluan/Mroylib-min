@@ -24,6 +24,7 @@ try:
 except Exception:
     pass
 
+LOGIN_SET = False
 """
 # example:
 # use:
@@ -274,7 +275,8 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
         
         if not con:
             return __change_str
-
+        if con.tp == "mysql":
+            __change_str = __change_str.replace("?","%s")
         try:
             if DEBUG:
                 logging.debug(__change_str)
@@ -749,7 +751,7 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
 
             yield o
 
-    def query(self,obj, eq="=", m='or', extend="", orderby='', limit='', timestamp=None,**kargs):
+    def query(self,obj, eq="=", m='and', extend="", orderby='', limit='', timestamp=None,**kargs):
         """
         eq: like
             =
@@ -904,6 +906,9 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
         try:
             res = self._con.execute(cmd)
             if self.tp =='mysql':
+                if cmd.startswith("DELETE") or cmd.startswith("delete"):
+                    self._con.commit()
+                    return True
                 res = self._con
             for i,v in enumerate(res.fetchall()):
                 yield v
@@ -941,13 +946,13 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
             
                 
 
-    def export_to_es(self, obj, host="http://localhost:9200"):
+    def export_to_es(self, obj, host="http://localhost:9200", index=None):
         """
         export data to elasticsearch :
             @Index you need to special: like database
             @type will use Obje(table)'s name
         """
-        index = obj.__name__.lower()
+        index = index + "_" + obj.__name__.lower() if index else obj.__name__
         res = requests.put(host + "/" + index).json()
         if 'error' in res:
             print(res)
@@ -959,35 +964,29 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
         endpoint = host + "/_bulk"
         res = ""
         c = 0
-        print("load from db:" ,obj.__name__)
+        print("index :" , index)
         try:
+            items = []
             for i,o in enumerate(self.query(obj)):
                 # print(o.get_dict())
                 o2 = o.get_dict()
-                if 'time' in o2:
-                    o2.pop("time")
-                v = json.dumps(dict([ (i[0], str(i[1]) ) for i in o.show()]))
+                o2.pop("id")
+                vd = dict([ (i[0], str(i[1]) ) for i in o.show()])
+                items.append(vd)
+                if len(items) % 10000 ==0:
+                    to_es_from_dicts(items, index, type_name, endpoint=endpoint)
+                    items = []
                 # v = json.dumps(o2)
-                res += '{ "index" : { "_index" : "%s", "_type" : "%s", "_id" : "%s" } }\n' % (index, type_name, o.id)
-                res += v +"\n"
-                c += 1
-                print("[merge : %d]" % c, end='\r')
-                if i % 2000 == 0:
-                    requests.post(endpoint, data=res, headers={'content-type':'application/json;charset=UTF-8'}).json()
-                    res = ""
-            if res != "":
-                print("[merge : %d]" % c, end='\r')
-                logging.info("prepare finish {c} , data -> {endpoint}".format(c=c,endpoint=endpoint))
-                requests.post(endpoint, data=res, headers={'content-type':'application/json;charset=UTF-8'}).json()
+                
+            if len(items) > 0:
+                to_es_from_dicts(items, index, type_name, endpoint=endpoint)
+                
         except Exception as e:
             print(e)
         return c
         
-        # print(res)
-        
-        # return requests.post(endpoint, data=res, headers={'content-type':'application/json;charset=UTF-8'}).json()
 
-    def export_to_es_all(self, host="http://localhost:9200"):
+    def export_to_es_all(self, host="http://localhost:9200", index=None):
         # with ThreadPoolExecutor(10) as exe:
         if 1:
             tables = self.ls()
@@ -995,8 +994,8 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
                 if table == 'sqlite_sequence' :continue
                 print(table , "->", host)
                 ObjCls = type(table, (dbobj,), {})
-                res = self.export_to_es(ObjCls, host=host)
-                print(res)
+                self.export_to_es(ObjCls, host=host, index=index)
+                # print(res)
                 # exe.submit(self.export_to_es, ObjCls, host=host)
 
 
@@ -1013,9 +1012,12 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
                 _REMOVE_STR += "%s=? and " % k
             _delete_str = _REMOVE_STR[:-4] + ";"         
             vals = kargs.values()
+            if self.tp == "mysql":
+                _delete_str = _delete_str.replace("?", "%s")
             try:
                 self._con.execute(_delete_str, list(vals))
                 self._con.commit()
+                return True
             except sqlite3.OperationalError as e:
                 logging.error(_delete_str)
             except Exception as e:
@@ -1029,9 +1031,12 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
             __DELETE_STR += "%s=? and " % k
         _delete_str = __DELETE_STR[:-4] + ";"
         vals = __dict.values()
+        if self.tp == "mysql":
+            _delete_str = _delete_str.replace("?", "%s")
         try:
             self._con.execute(_delete_str, list(vals))
             self._con.commit()
+            return True
         except sqlite3.OperationalError as e:
             logging.error("{} line:820".format(_delete_str))
             raise e
@@ -1195,52 +1200,17 @@ c.query(XXX, '~2', time=1512124620.0)   # time before 2017-12-1 18:37:00 +- 2 se
         endpoint = url + "/_bulk"
         with open(csv_file, encoding="utf-8") as f:
             dd = csv.DictReader(f)
-            csv_obj = os.path.basename(csv_file).replace(" ", "_").replace(".", "_").lower()
+            index = os.path.basename(csv_file).replace(" ", "_").replace(".", "_").lower()
+            type_name = index
             c = 0
-            res = ""
-            ok = 0
+            
+            dicts = []
             try:
-                for id, obj in enumerate(dd):
+                for obj in enumerate(dd):
                     # print(obj)
                     o = dict(obj)
-                    o["id"] = id
-                    if '_id' in o:
-                        o.pop("_id")
-                    if '' in o:
-                        o.pop('')
-                    if None in o:
-                        o.pop(None)
-                    if None in o:
-                        o.pop(None)
-                    type_name = csv_obj
-                    index = csv_obj
-                    
-                    
-                    try:    
-                        v = json.dumps(o)
-                        res += '{ "index" : { "_index" : "%s", "_type" : "%s", "_id" : "%s" } }\n' % (index, type_name, o["id"])
-                        res += v +"\n"
-                        c += 1
-                        # print("[merge : %d]" % c, end='\r')
-                        if c % 5000 == 0:
-                            r = requests.post(endpoint, data=res.encode("utf-8"), headers={'content-type':'application/json;charset=UTF-8'}).json()
-                            result = sum([i['index']['_shards']['successful'] for i in r['items'] if '_shards' in i['index'] ])
-                            res = ""
-                            ok += result
-                            print(index, "import to es : ",ok, end='\r')
-                        
-                    except Exception as e:
-                        print(e)
-                        import pdb;pdb.set_trace()
-                
-                if res != "":
-                    # print("[merge : %d]" % c, end='\r')
-                    logging.info("prepare finish {c} , data -> {endpoint}".format(c=c,endpoint=endpoint))
-                    r = requests.post(endpoint, data=res.encode("utf-8"), headers={'content-type':'application/json;charset=UTF-8'}).json()
-                    result = sum([i['index']['_shards']['successful'] for i in r['items']])
-                    # print(csv_obj,"import to es : ",result)
-                    ok += result
-                    print(index, "import to es : ",ok)
+                    dicts.append(o)
+                to_es_from_dicts(dicts, index, type_name, endpoint=endpoint)
             except Exception as e:
                 print(e)
         
@@ -1321,12 +1291,36 @@ def csv_to_sql(Obj,csv_file, *fields, cache=None):
     c.save_all(*cs)
     return True
 
+def logging_error(o):
+    global LOGIN_SET
+    if not LOGIN_SET:
+        logging.basicConfig(level=logging.ERROR,
+                    format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+                    datefmt='%m-%d %H:%M',
+                    filename='/tmp/to-es.err.log',
+                    filemode='a+')
+        LOGIN_SET = True
+    logging.error(o)
 
-def to_es_from_dicts(vs, index, type_name, endpoint='http://localhost:9200/_bulk'):
+def to_es_from_dicts(vs, index, type_name,start_id=0, endpoint='http://localhost:9200/_bulk', endpoint_count='http://localhost:9200/_cat/count/'):
     res = ""
     ok = 0
     c = 0
+    if not endpoint.startswith("http://localhost:9200"):
+        endpoint_count = endpoint.replace("_bulk", "_cat/count/")
+        if endpoint_count.endswith("//"):
+            endpoint_count = endpoint_count[:-1]
+
+    if not start_id:
+        test_res = requests.get(endpoint_count + index + "?format=json").json()
+        if "error" in test_res:
+            start_id = 0
+        else:
+            start_id = int(test_res[0]['count'])+1
+            print("start at :", start_id)
+
     for id,o in enumerate(vs):
+        id += start_id
         assert isinstance(o, dict) is True
         if not 'id' in o:
             o['id'] = id
@@ -1351,8 +1345,10 @@ def to_es_from_dicts(vs, index, type_name, endpoint='http://localhost:9200/_bulk
                     ok += result
                     print("%s import : %d" % (index, ok))
                 except  Exception as e:
-                    print(e)
-                    import pdb;pdb.set_trace()
+                    for i in r['items']:
+                        if 'error' in ['index']:
+                            uid = i['index']['_id']
+                            logging_error(vs[uid - start_id])
         except Exception as e:
             print(e)
     try:    
@@ -1369,7 +1365,10 @@ def to_es_from_dicts(vs, index, type_name, endpoint='http://localhost:9200/_bulk
                 ok += result
                 print("%s import : %d" % (index, ok))
             except  Exception as e:
-                import pdb;pdb.set_trace()
+                for i in r['items']:
+                    if 'error' in ['index']:
+                        uid = i['index']['_id']
+                        logging_error(vs[uid - start_id])
     except Exception as e:
         print(e)
     finally:
@@ -1426,115 +1425,35 @@ def json_to_sql(table_name, json_file,map=None, handler=None,cache=None, **optio
             c.save_all(*cs)
     return cs
 
-def from_json_to_es(file, host="http://localhost:9200"):
+
+
+def xlsx_to_es(file, granularity=20,fields=None, host="http://localhost:9200"):
     endpoint = host + "/_bulk"
-    name_index = os.path.basename(file).replace(".","_").replace(" ", "_").lower()
-    with open(file) as fp:
-        datas = json.load(fp)
-        if not isinstance(datas, list):
-            print("this json can not -> elasticsearch ! , must list_json")
-            sys.exit(0)
-        
-
-
-        type_name = name_index
-        index = type_name
-        c = 0
-        ok = 0
-        for id,o in enumerate(datas):
-            if 'id' not in o:
-                o['id'] = id
-
-            res += '{ "index" : { "_index" : "%s", "_type" : "%s", "_id" : "%s" } }\n' % (index, type_name, o["id"])
-            res += v +"\n"
-        
-            if c % 5000 == 0:
-                r = requests.post(endpoint, data=res.encode("utf-8"), headers={'content-type':'application/json;charset=UTF-8'}).json()
-                try:
-                    result = sum([i['index']['_shards']['successful'] for i in r['items']])
-                    res = ""
-                    ok += result
-                    print("%s import to es : "% index,ok, end='\r')
-                except  Exception as e:
-                    import pdb;pdb.set_trace()
-        
-        if res != "":
-            # print("[merge : %d]" % c, end='\r')
-            logging.info("prepare finish {c} , data -> {endpoint}".format(c=c,endpoint=endpoint))
-            r = requests.post(endpoint, data=res.encode("utf-8"), headers={'content-type':'application/json;charset=UTF-8'}).json()
-            result = sum([i['index']['_shards']['successful'] for i in r['items']])
-            # print(csv_obj,"import to es : ",result)
-            ok += result
-            print("%s import to es : ",index,ok)
-
-
-
-def xlsx_to_es(file, granularity=20, host="http://localhost:9200"):
-    endpoint = host + "/_bulk"
+    endpoint_count = host + "/_cat/count"
     sheets = xlrd.open_workbook(file)
     data = os.path.basename(file).replace(".","_").replace(" ", "_").lower()
     for table in  sheets.sheets():
         table_name = data + table.name
         rows = table.nrows
         cols = table.ncols
-        
-        fields = ["field_%d" % no  for no,i in enumerate(table.row(0))]
-        Obj = type(table_name, (dbobj,), {})
-        logging.info(Obj.__name__)
+        if not fields or not isinstance(fields, list):
+            fields = ["field_%d" % no  for no,i in enumerate(table.row(0))]
         all_sql_objs = []
         print("table : ",table_name.replace(".", "_").replace(" ","_").lower())
-
-        res = ""
-        c = 0
-        ok = 0
-        for id,i in enumerate(range(1, rows)):
+        type_name = table_name.replace(".", "_").replace(" ","_").lower()
+        index = type_name
+        for i in enumerate(range(1, rows)):
 
             o = dict(zip(fields, [i.value for i in table.row(i)]))
-            o["id"] = id
-            if None in o:
-                o.pop(None)
-            if "" in o:
-                o.pop("")
-
-            type_name = table_name.replace(".", "_").replace(" ","_").lower()
-            index = type_name
+            all_sql_objs.append(o)
             
+            if len(all_sql_objs) % 5000 == 0:
+                to_es_from_dicts(all_sql_objs, index, type_name, endpoint=endpoint, endpoint_count=endpoint_count)
+                all_sql_objs = []
+        if len(all_sql_objs) > 0:
+            to_es_from_dicts(all_sql_objs, index, type_name, endpoint=endpoint, endpoint_count=endpoint_count)
+            all_sql_objs = []
             
-            try:    
-                v = json.dumps(o)
-                res += '{ "index" : { "_index" : "%s", "_type" : "%s", "_id" : "%s" } }\n' % (index, type_name, o["id"])
-                res += v +"\n"
-                c += 1
-                # print("[merge : %d]" % c, end='\r')
-                
-                if c % 5000 == 0:
-                    r = requests.post(endpoint, data=res.encode("utf-8"), headers={'content-type':'application/json;charset=UTF-8'}).json()
-                    try:
-                        result = sum([i['index']['_shards']['successful'] for i in r['items']])
-                        res = ""
-                        ok += result
-                        print("%s import to es : "% index,ok, end='\r')
-                    except  Exception as e:
-                        import pdb;pdb.set_trace()
-                
-            except Exception as e:
-                print(e)
-        
-        if res != "":
-            # print("[merge : %d]" % c, end='\r')
-            logging.info("prepare finish {c} , data -> {endpoint}".format(c=c,endpoint=endpoint))
-            r = requests.post(endpoint, data=res.encode("utf-8"), headers={'content-type':'application/json;charset=UTF-8'}).json()
-            result = sum([i['index']['_shards']['successful'] for i in r['items']])
-            # print(csv_obj,"import to es : ",result)
-            ok += result
-            print(index,"import to es : ",ok)
-        #     all_sql_objs.append(o)
-        #     if len(all_sql_objs) >= granularity:
-        #         yield all_sql_objs
-        #         all_sql_objs = []
-
-        # if len(all_sql_objs) != 0:
-        #     yield all_sql_objs
 
 def open_xlsx(file, granularity=20):
     sheets = xlrd.open_workbook(file)
